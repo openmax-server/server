@@ -1,6 +1,7 @@
 import asyncio, logging, traceback
 from oneme_tcp.proto import Proto
 from oneme_tcp.processors import Processors
+from common.tools import Tools
 
 class OnemeMobileServer:
     def __init__(self, host="0.0.0.0", port=443, ssl_context=None, db_pool=None, clients={}, send_event=None, telegram_bot=None):
@@ -13,6 +14,7 @@ class OnemeMobileServer:
         self.clients = clients
 
         self.proto = Proto()
+        self.auth_required = Tools().auth_required
         self.processors = Processors(db_pool=db_pool, clients=clients, send_event=send_event, telegram_bot=telegram_bot)
 
     async def handle_client(self, reader, writer):
@@ -54,6 +56,7 @@ class OnemeMobileServer:
                     case self.proto.LOGIN:
                         userPhone, userId, hashedToken = await self.processors.process_login(payload, seq, writer)
                     
+                        # Если авторизация на сервере успешная - можем завершить авторизацию
                         if userPhone:
                             await self._finish_auth(writer, address, userPhone, userId)
                     case self.proto.LOGOUT:
@@ -64,27 +67,49 @@ class OnemeMobileServer:
                     case self.proto.LOG:
                         await self.processors.process_telemetry(payload, seq, writer)
                     case self.proto.ASSETS_UPDATE:
-                        await self.processors.process_get_assets(payload, seq, writer)
+                        await self.auth_required(
+                            userPhone, self.processors.process_get_assets, payload, seq, writer
+                        )
                     case self.proto.VIDEO_CHAT_HISTORY:
-                        await self.processors.process_get_call_history(payload, seq, writer)
+                        await self.auth_required(
+                            userPhone, self.processors.process_get_call_history, payload, seq, writer
+                        )
                     case self.proto.MSG_SEND:
-                        await self.processors.process_send_message(payload, seq, writer, senderId=userId, db_pool=self.db_pool)
+                        await self.auth_required(
+                            userPhone, self.processors.process_send_message, payload, seq, writer, senderId=userId, db_pool=self.db_pool
+                        )
                     case self.proto.FOLDERS_GET:
-                        await self.processors.process_get_folders(payload, seq, writer, senderPhone=userPhone)
+                        await self.auth_required(
+                            userPhone, self.processors.process_get_folders, payload, seq, writer, senderPhone=userPhone
+                        )
                     case self.proto.SESSIONS_INFO:
-                        await self.processors.process_get_sessions(payload, seq, writer, senderPhone=userPhone, hashedToken=hashedToken)
+                        await self.auth_required(
+                            userPhone, self.processors.process_get_sessions, payload, seq, writer, senderPhone=userPhone, hashedToken=hashedToken
+                        )
                     case self.proto.CHAT_INFO:
-                        await self.processors.process_search_chats(payload, seq, writer, senderId=userId)
+                        await self.auth_required(
+                            userPhone, self.processors.process_search_chats, payload, seq, writer, senderId=userId
+                        )
                     case self.proto.CONTACT_INFO_BY_PHONE:
-                        await self.processors.process_search_by_phone(payload, seq, writer, senderId=userId)
+                        await self.auth_required(
+                            userPhone, self.processors.process_search_by_phone, payload, seq, writer, senderId=userId
+                        )
                     case self.proto.OK_TOKEN:
-                        await self.processors.process_get_call_token(payload, seq, writer)
+                        await self.auth_required(
+                            userPhone, self.processors.process_get_call_token, payload, seq, writer
+                        )
                     case self.proto.MSG_TYPING:
-                        await self.processors.process_typing(payload, seq, writer, senderId=userId)
+                        await self.auth_required(
+                            userPhone, self.processors.process_typing, payload, seq, writer, senderId=userId
+                        )
                     case self.proto.CONTACT_INFO:
-                        await self.processors.process_search_users(payload, seq, writer)
+                        await self.auth_required(
+                            userPhone, self.processors.process_search_users, payload, seq, writer
+                        )
                     case self.proto.COMPLAIN_REASONS_GET:
-                        await self.processors.process_complain_reasons_get(payload, seq, writer)
+                        await self.auth_required(
+                            userPhone, self.processors.process_complain_reasons_get, payload, seq, writer
+                        )
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
         except Exception as e:

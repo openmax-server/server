@@ -183,3 +183,7 @@ class Tools:
 
                 # Возвращаем
                 return message, int(row.get("time"))
+
+    async def auth_required(self, userPhone, coro, *args):
+        if userPhone:
+            await coro(*args)

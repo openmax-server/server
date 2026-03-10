@@ -95,12 +95,10 @@ class Processors:
                 await cursor.execute("SELECT * FROM users WHERE phone = %s", (phone,))
                 user = await cursor.fetchone()
 
-                if user is None:
-                    await self._send_error(seq, self.proto.REQUEST_CODE, self.error_types.USER_NOT_FOUND, writer)
-                    return
-
-                # Сохраняем токен
-                await cursor.execute("INSERT INTO auth_tokens (phone, token_hash, code_hash, expires, state) VALUES (%s, %s, %s, %s, %s)", (phone, token_hash, code_hash, expires, "started",))
+                # Если пользователь существует, сохраняем токен
+                if user:
+                    # Сохраняем токен
+                    await cursor.execute("INSERT INTO auth_tokens (phone, token_hash, code_hash, expires, state) VALUES (%s, %s, %s, %s, %s)", (phone, token_hash, code_hash, expires, "started",))
 
         # Данные пакета
         payload = {

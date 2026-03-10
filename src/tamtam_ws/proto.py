@@ -18,7 +18,7 @@ class Proto:
         try:
             parsed_packet = json.loads(packet)
         except:
-            return {}
+            return None
         
         return parsed_packet
         # мне кажется долго вручную всё писать

@@ -21,6 +21,11 @@ class TTWSServer:
             # Распаковываем пакет
             packet = self.proto.unpack_packet(message)
 
+            # Если ничего не извлекли
+            if packet is None:
+                self.logger.error(f"Не удалось распаковать пакет - {message}")
+                return
+
             # Валидируем структуру пакета
             try:
                 MessageModel.model_validate(packet)
