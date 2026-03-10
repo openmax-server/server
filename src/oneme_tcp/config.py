@@ -179,7 +179,7 @@ class OnemeConfig:
         "moscow-theme-enabled": True,
         "msg-get-reactions-page-size": 40,
         "music-files-enabled": False,
-        "mytracker-enabled": True,
+        "mytracker-enabled": False,
         "net-client-dns-enabled": True,
         "net-session-suppress-bad-disconnected-state": True,
         "net-stat-config": [
