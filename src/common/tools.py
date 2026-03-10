@@ -46,6 +46,38 @@ class Tools:
             }
         else:
             return contact
+        
+    def generate_profile_tt(
+        self, id=1, phone=70000000000, avatarUrl=None,
+        photoId=None, updateTime=0,
+        firstName="Test", lastName="Account", options=[], 
+        description=None, username=None
+    ):
+        contact = {
+            "id": id,
+            "updateTime": updateTime,
+            "phone": phone,
+            "names": [
+                {
+                    "name": f"{firstName} {lastName}",
+                    "type": "TT"
+                }
+            ],
+            "options": options
+        }
+
+        if avatarUrl:
+            contact["photoId"] = photoId
+            contact["baseUrl"] = avatarUrl
+            contact["baseRawUrl"] = avatarUrl
+
+        if description:
+            contact["description"] = description
+
+        if username:
+            contact["link"] = "https://tamtam.chat/" + username
+
+        return contact
            
     def generate_chat(self, id, owner, type, participants, lastMessage, lastEventTime):
         """Генерация чата"""
