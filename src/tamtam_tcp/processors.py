@@ -1,4 +1,5 @@
-import hashlib, secrets, random, time, logging, json
+import hashlib, secrets, random, time, logging, json # PEP-8 по приколу сделан >_<
+import re
 from common.static import Static
 from common.tools import Tools
 from tamtam_tcp.proto import Proto
@@ -76,17 +77,17 @@ class Processors:
             return
 
         # Извлекаем телефон из пакета
-        phone = payload.get("phone").replace("+", "").replace(" ", "").replace("-", "")
+        phone = re.sub(r'\D', '', payload.get("phone", "")) # Не хардкодим, через регулярки
 
         # Генерируем токен с кодом
-        code = str(random.randint(000000, 999999))
+        code = f"{secrets.randbelow(1_000_000):06d}" # Старая версия ненадежна, могла отбросить ведущие нули или вообще интерпритировать как систему счисления с основанием 8
         token = secrets.token_urlsafe(128)
 
         # Хешируем
         code_hash = hashlib.sha256(code.encode()).hexdigest()
         token_hash = hashlib.sha256(token.encode()).hexdigest()
 
-        # Время истечения токена
+        # Срок жизни токена (5 минут)
         expires = int(time.time()) + 300
 
         # Ищем пользователя, и если он существует, сохраняем токен
