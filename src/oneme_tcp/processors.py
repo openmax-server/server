@@ -142,18 +142,15 @@ class Processors:
                 await cursor.execute("SELECT * FROM users WHERE phone = %s", (phone,))
                 user = await cursor.fetchone()
 
-                # Если пользователя нет - отдаем ошибку
-                if user is None:
-                    await self._send_error(seq, self.proto.AUTH_REQUEST, self.error_types.USER_NOT_FOUND, writer)
-                    return
+                # Если пользователя найден - сохраняем токен и отправляем код
+                if user:
+                    # Сохраняем токен
+                    await cursor.execute("INSERT INTO auth_tokens (phone, token_hash, code_hash, expires) VALUES (%s, %s, %s, %s)", (phone, token_hash, code_hash, expires,))
 
-                # Сохраняем токен
-                await cursor.execute("INSERT INTO auth_tokens (phone, token_hash, code_hash, expires) VALUES (%s, %s, %s, %s)", (phone, token_hash, code_hash, expires,))
-
-        # Если тг бот включен, и тг привязан к аккаунту - отправляем туда сообщение
-        if self.telegram_bot and user.get("telegram_id"):
-            await self.telegram_bot.send_code(chat_id=int(user.get("telegram_id")), phone=phone, code=code)
-        
+                    # Если тг бот включен, и тг привязан к аккаунту - отправляем туда сообщение
+                    if self.telegram_bot and user.get("telegram_id"):
+                        await self.telegram_bot.send_code(chat_id=int(user.get("telegram_id")), phone=phone, code=code)
+                    
         # Данные пакета
         payload = {
             "requestMaxDuration": 60000,
