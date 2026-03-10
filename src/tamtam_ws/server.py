@@ -6,12 +6,13 @@ from tamtam_ws.proto import Proto
 from tamtam_ws.processors import Processors
 
 class TTWSServer:
-    def __init__(self, host, port, db_pool=None, clients={}, send_event=None):
+    def __init__(self, host, port, db_pool=None, clients={}, send_event=None, origins=None):
         self.host = host
         self.port = port
         self.proto = Proto()
         self.processors = Processors(db_pool=db_pool, clients=clients, send_event=send_event)
         self.logger = logging.getLogger(__name__)
+        self.origins = origins
 
     async def handle_client(self, websocket):
         deviceType = None
@@ -57,5 +58,8 @@ class TTWSServer:
     async def start(self):
         self.logger.info(f"Вебсокет запущен на порту {self.port}")
 
-        async with serve(self.handle_client, self.host, self.port):
+        async with serve(handler=self.handle_client, 
+                         host=self.host, 
+                         port=self.port,
+                         origins=self.origins):
             await asyncio.Future()

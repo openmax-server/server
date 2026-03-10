@@ -68,7 +68,8 @@ async def main():
         "db": db,
         "ssl": ssl_context,
         "clients": clients,
-        "event": api_event
+        "event": api_event,
+        "origins": server_config.origins
     }
 
     controllers = {
