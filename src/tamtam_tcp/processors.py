@@ -1,12 +1,19 @@
-import hashlib, secrets, random, time, logging, json # PEP-8 по приколу сделан >_<
+import hashlib
+import secrets
+import time
+import logging
+import json
 import re
 from common.static import Static
 from common.tools import Tools
 from tamtam_tcp.proto import Proto
 from tamtam_tcp.models import *
 
+
 class Processors:
-    def __init__(self, db_pool=None, clients={}, send_event=None):
+    def __init__(self, db_pool=None, clients=None, send_event=None):
+        if clients is None:
+            clients = {}  # Более правильная логика
         self.static = Static()
         self.proto = Proto()
         self.tools = Tools()
@@ -28,11 +35,11 @@ class Processors:
             "message": "Unknown error",
             "title": "Неизвестная ошибка"
         })
-        
+
         packet = self.proto.pack_packet(
             cmd=self.proto.CMD_ERR, seq=seq, opcode=opcode, payload=payload
         )
-        
+
         await self._send(writer, packet)
 
     async def process_hello(self, payload, seq, writer):
@@ -43,10 +50,10 @@ class Processors:
         except Exception as e:
             await self._send_error(seq, self.proto.HELLO, self.error_types.INVALID_PAYLOAD, writer)
             return None, None
-        
+
         # Получаем данные из пакета
-        deviceType = payload.get("userAgent").get("deviceType")
-        deviceName = payload.get("userAgent").get("deviceName")
+        device_type = payload.get("userAgent").get("deviceType")
+        device_name = payload.get("userAgent").get("deviceName")
 
         # Данные пакета
         payload = {
@@ -65,8 +72,8 @@ class Processors:
 
         # Отправляем
         await self._send(writer, packet)
-        return deviceType, deviceName
-    
+        return device_type, device_name
+
     async def process_request_code(self, payload, seq, writer):
         """Обработчик запроса кода"""
         # Валидируем данные пакета
@@ -77,10 +84,10 @@ class Processors:
             return
 
         # Извлекаем телефон из пакета
-        phone = re.sub(r'\D', '', payload.get("phone", "")) # Не хардкодим, через регулярки
+        phone = re.sub(r'\D', '', payload.get("phone", ""))  # Не хардкодим, через регулярки
 
         # Генерируем токен с кодом
-        code = f"{secrets.randbelow(1_000_000):06d}" # Старая версия ненадежна, могла отбросить ведущие нули или вообще интерпритировать как систему счисления с основанием 8
+        code = f"{secrets.randbelow(1_000_000):06d}"  # Старая версия ненадежна, могла отбросить ведущие нули или вообще интерпритировать как систему счисления с основанием 8
         token = secrets.token_urlsafe(128)
 
         # Хешируем
@@ -96,12 +103,14 @@ class Processors:
                 await cursor.execute("SELECT * FROM users WHERE phone = %s", (phone,))
                 user = await cursor.fetchone()
 
-                if user is None:
+                if not user:
                     await self._send_error(seq, self.proto.REQUEST_CODE, self.error_types.USER_NOT_FOUND, writer)
                     return
 
                 # Сохраняем токен
-                await cursor.execute("INSERT INTO auth_tokens (phone, token_hash, code_hash, expires, state) VALUES (%s, %s, %s, %s, %s)", (phone, token_hash, code_hash, expires, "started",))
+                await cursor.execute(
+                    "INSERT INTO auth_tokens (phone, token_hash, code_hash, expires, state) VALUES (%s, %s, %s, %s, %s)",
+                    (phone, token_hash, code_hash, expires, "started",))
 
         # Данные пакета
         payload = {
@@ -144,10 +153,11 @@ class Processors:
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 # Ищем токен
-                await cursor.execute("SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()", (hashed_token,))
+                await cursor.execute("SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()",
+                                     (hashed_token,))
                 stored_token = await cursor.fetchone()
 
-                if stored_token is None:
+                if not stored_token:
                     await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.CODE_EXPIRED, writer)
                     return
 
@@ -155,13 +165,14 @@ class Processors:
                 if stored_token.get("code_hash") != hashed_code:
                     await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.INVALID_CODE, writer)
                     return
-                
+
                 # Ищем аккаунт
                 await cursor.execute("SELECT * FROM users WHERE phone = %s", (stored_token.get("phone"),))
                 account = await cursor.fetchone()
 
                 # Обновляем состояние токена
-                await cursor.execute("UPDATE auth_tokens set state = %s WHERE token_hash = %s", ("verified", hashed_token,))
+                await cursor.execute("UPDATE auth_tokens set state = %s WHERE token_hash = %s",
+                                     ("verified", hashed_token,))
 
                 # # Создаем сессию
                 # await cursor.execute(
@@ -171,9 +182,9 @@ class Processors:
 
         # Генерируем профиль
         # Аватарка с биографией
-        photoId = None if not account.get("avatar_id") else int(account.get("avatar_id"))
-        avatar_url = None if not photoId else self.config.avatar_base_url + photoId
-        description = None if not account.get("description") else account.get("description")
+        photo_id = int(account["avatar_id"]) if account.get("avatar_id") else None
+        avatar_url = f"{self.config.avatar_base_url}{photo_id}" if photo_id else None
+        description = account.get("description")
 
         # Собираем данные пакета
         payload = {
@@ -181,7 +192,7 @@ class Processors:
                 id=account.get("id"),
                 phone=int(account.get("phone")),
                 avatarUrl=avatar_url,
-                photoId=photoId,
+                photoId=photo_id,
                 updateTime=int(account.get("updatetime")),
                 firstName=account.get("firstname"),
                 lastName=account.get("lastname"),
@@ -235,7 +246,8 @@ class Processors:
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 # Ищем токен
-                await cursor.execute("SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()", (hashed_token,))
+                await cursor.execute("SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()",
+                                     (hashed_token,))
                 stored_token = await cursor.fetchone()
 
                 if stored_token is None:
@@ -256,12 +268,13 @@ class Processors:
                 # Создаем сессию
                 await cursor.execute(
                     "INSERT INTO tokens (phone, token_hash, device_type, device_name, location, time) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (stored_token.get("phone"), hashed_login, deviceType, deviceName, "Epstein Island", int(time.time()),)    
+                    (stored_token.get("phone"), hashed_login, deviceType, deviceName, "Epstein Island",
+                     int(time.time()),)
                 )
 
         # Аватарка с биографией
-        photoId = None if not account.get("avatar_id") else int(account.get("avatar_id"))
-        avatar_url = None if not photoId else self.config.avatar_base_url + photoId
+        photo_id = None if not account.get("avatar_id") else int(account.get("avatar_id"))
+        avatar_url = None if not photo_id else self.config.avatar_base_url + photo_id
         description = None if not account.get("description") else account.get("description")
 
         # Собираем данные пакета
@@ -271,7 +284,7 @@ class Processors:
                 id=account.get("id"),
                 phone=int(account.get("phone")),
                 avatarUrl=avatar_url,
-                photoId=photoId,
+                photoId=photo_id,
                 updateTime=int(account.get("updatetime")),
                 firstName=account.get("firstname"),
                 lastName=account.get("lastname"),
