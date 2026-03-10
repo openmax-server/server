@@ -1,3 +1,7 @@
+
+
+
+
 # Изменение сервера в мобильном приложении Max на android прямо в apk
 ## Прямо на телефоне
 ### MT Manager
@@ -17,10 +21,10 @@
 ### apktool
 #### Убедитесь что у вас стоит apktool и java!
 1. Помещаем apk в удобное место
-2. открываем косноль в этой папке и декомпилиреум пример команды: apktool d <имя апк> -o max_project (может чуть отличаться на windows)
-3. Заходим в папке проекта и через удобную вам утилиту ищем и заменяем сервер или используем консоль
-Linux:
-find max_project -type f -name "*.smali" -exec sed -i 's/api.oneme.ru/ваш_новый_домен/g' {} +
-Powershell:
-Get-ChildItem -Path "max_project" -Recurse -Filter "*.smali" | ForEach-Object { (Get-Content $_.FullName) -replace 'api.oneme.ru', 'ваш_новый_домен' | Set-Content $_.FullName }
-4. компилируем пример коиманды: apktool b max_project -o max_modified.apk
+2. открываем косноль в этой папке и декомпилиреум пример команды: `apktool d <имя апк> -o max_project` (может чуть отличаться на windows)
+3. Заходим в папке проекта и через удобную вам утилиту ищем и заменяем сервер или используем консоль<br>
+Linux:<br>
+`find max_project -type f -name "*.smali" -exec sed -i 's/api.oneme.ru/ваш_новый_домен/g' {} +`<br>
+Powershell:<br>
+`Get-ChildItem -Path "max_project" -Recurse -Filter "*.smali" | ForEach-Object { (Get-Content $_.FullName) -replace 'api.oneme.ru', 'ваш_новый_домен' | Set-Content $_.FullName }`
+4. компилируем пример коиманды: `apktool b max_project -o max_modified.apk`
