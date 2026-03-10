@@ -15,7 +15,10 @@ class Processors:
 
     async def _send(self, writer, packet):
         """Отправка пакета"""
-        await writer.send(packet)
+        try:
+            await writer.send(packet)
+        except Exception as error:
+            self.logger.error(f"Ошибка при отправке пакета - {error}")
 
     async def _send_error(self, seq, opcode, type, writer):
         payload = self.static.ERROR_TYPES.get(type, {
@@ -36,7 +39,8 @@ class Processors:
         # Валидируем данные пакета
         try:
             HelloPayloadModel.model_validate(payload)
-        except Exception as e:
+        except pydantic.ValidationError as error:
+            self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
             await self._send_error(seq, self.proto.SESSION_INIT, self.error_types.INVALID_PAYLOAD, writer)
             return None, None
 

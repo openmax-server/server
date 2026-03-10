@@ -36,6 +36,14 @@ class Proto:
         # мб найдем че. она без обфускации
         # а ты ее видишь?
         # пошли
+
+    ### Констаты протокола
+    CMD_OK = 1
+    CMD_NOF = 2
+    CMD_ERR = 3
+    PROTO_VER = 10
+
+    ### Команды
     PING = 1
     LOG = 5
     SESSION_INIT = 6

@@ -24,8 +24,9 @@ class TTWSServer:
             # Валидируем структуру пакета
             try:
                 MessageModel.model_validate(packet)
-            except ValidationError as e:
-                self.logger.error(e)
+            except ValidationError as error:
+                self.logger.error(f"Произошла ошибка при валидации структуры пакета: {error}")
+                return
                 
             # Извлекаем данные из пакета
             seq = packet['seq']
@@ -44,12 +45,6 @@ class TTWSServer:
                     # УДАЛЯЕМ MYTRACKER ИЗ TAMTAM ТАМ ВИРУС
                     # майтрекер отправляет все ваши сообщения на сервер барака обамы. немедленно удаляем!!!
                     await self.processors.process_telemetry(payload, seq, websocket)
-                # case self.proto.AUTH_REQUEST:
-                #     await self.processors.process_auth_request(payload, seq, websocket)
-                # case self.proto.VERIFY_CODE:
-                #     await self.processors.process_verify_code(payload, seq, websocket)
-                # case self.proto.FINAL_AUTH:
-                #     await self.processors.process_final_auth(payload, seq, websocket, deviceType, deviceName)
 
                 # лан я пойду. пока
                 # а ок
