@@ -21,12 +21,17 @@ class TTWSServer:
             # Распаковываем пакет
             packet = self.proto.unpack_packet(message)
 
+            if not packet:
+                self.logger.warning("Невалидный пакет от ws клиента")
+                continue
+
             # Валидируем структуру пакета
             try:
                 MessageModel.model_validate(packet)
             except ValidationError as e:
-                self.logger.error(e)
-                
+                self.logger.warning(f"Ошибка валидации пакета: {e}")
+                continue
+
             # Извлекаем данные из пакета
             seq = packet['seq']
             opcode = packet['opcode']
@@ -57,5 +62,10 @@ class TTWSServer:
     async def start(self):
         self.logger.info(f"Вебсокет запущен на порту {self.port}")
 
-        async with serve(self.handle_client, self.host, self.port):
+        async with serve(
+            self.handle_client, self.host, self.port,
+            max_size=65536,
+            open_timeout=10,
+            close_timeout=10,
+        ):
             await asyncio.Future()

@@ -16,8 +16,11 @@ class OnemeMobileServer:
         self.proto = Proto()
         self.processors = Processors(db_pool=db_pool, clients=clients, send_event=send_event, telegram_bot=telegram_bot)
 
-        # rate limiter anti ddos brute force protection here
+        # rate limiter anti ddos brute force protection
         self.auth_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
+
+        self.read_timeout = 300 # Таймаут чтения из сокета (секунды)
+        self.max_read_size = 65536 # Максимальный размер данных из сокета
 
     async def handle_client(self, reader, writer):
         """Функция для обработки подключений"""
@@ -34,15 +37,32 @@ class OnemeMobileServer:
 
         try:
             while True:
-                # Читаем новые данные из сокета
-                data = await reader.read(4098)
+                # Читаем новые данные из сокета с таймаутом
+                try:
+                    data = await asyncio.wait_for(
+                        reader.read(self.max_read_size),
+                        timeout=self.read_timeout
+                    )
+                except asyncio.TimeoutError:
+                    self.logger.info(f"Таймаут соединения для {address[0]}:{address[1]}")
+                    break
 
                 # Если сокет закрыт - выходим из цикла
                 if not data:
                     break
 
+                
+                if len(data) > self.max_read_size:
+                    self.logger.warning(f"Пакет от {address[0]}:{address[1]} превышает лимит ({len(data)} байт)")
+                    break
+
                 # Распаковываем данные
                 packet = self.proto.unpack_packet(data)
+
+                # Скип если пакет невалидный 
+                if packet is None:
+                    self.logger.warning(f"Невалидный пакет от {address[0]}:{address[1]}")
+                    continue
 
                 opcode = packet.get("opcode")
                 seq = packet.get("seq")

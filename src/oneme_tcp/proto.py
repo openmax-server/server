@@ -4,8 +4,19 @@ class Proto:
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
 
+    # TODO узнать какие должны быть лимиты и поменять,
+    # сейчас это больше заглушка
+    MAX_PAYLOAD_SIZE = 1048576 # 1 MB
+    MAX_DECOMPRESSED_SIZE = 1048576 # 1 MB
+    HEADER_SIZE = 10 # 1+2+1+2+4
+
     ### Работа с протоколом
     def unpack_packet(self, data: bytes) -> dict | None:
+        # Проверяем минимальный размер пакета
+        if len(data) < self.HEADER_SIZE:
+            self.logger.warning(f"Пакет слишком маленький: {len(data)} байт")
+            return None
+
         # Распаковываем заголовок
         ver = int.from_bytes(data[0:1], "big")
         cmd = int.from_bytes(data[1:3], "big")
@@ -18,6 +29,17 @@ class Proto:
 
         # Парсим данные пакета
         payload_length = packed_len & 0xFFFFFF
+
+        # Проверяем размер payload
+        if payload_length > self.MAX_PAYLOAD_SIZE:
+            self.logger.warning(f"Payload слишком большой: {payload_length} B (лимит {self.MAX_PAYLOAD_SIZE})")
+            return None
+
+        # Проверяем длину пакета
+        if len(data) < self.HEADER_SIZE + payload_length:
+            self.logger.warning(f"Пакет неполный: требуется {self.HEADER_SIZE + payload_length} B, получено {len(data)}")
+            return None
+
         payload_bytes = data[10 : 10 + payload_length]
         payload = None
 
@@ -27,14 +49,14 @@ class Proto:
             if comp_flag != 0:
                 compressed_data = payload_bytes
                 try:
-
                     payload_bytes = lz4.block.decompress(
                         compressed_data,
-                        uncompressed_size=99999,
+                        uncompressed_size=self.MAX_DECOMPRESSED_SIZE,
                     )
                 except lz4.block.LZ4BlockError:
+                    self.logger.warning("Ошибка декомпрессии LZ4")
                     return None
-                
+
             # Распаковываем msgpack
             payload = msgpack.unpackb(payload_bytes, raw=False, strict_map_key=False)
 

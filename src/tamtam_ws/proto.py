@@ -12,14 +12,18 @@ class Proto:
             "payload": payload
         })
 
+    MAX_PACKET_SIZE = 65536 # 64 KB, заглушка, нужно узнать реальные лимиты и поменять, хотя кто будет это делать...
+
     def unpack_packet(self, packet):
-        # нужно try catch сделать
-        # чтобы не сыпалось всё при неверных пакетах
+        # try catch чтобы не сыпалось всё при неверных пакетах
+        if isinstance(packet, (str, bytes)) and len(packet) > self.MAX_PACKET_SIZE:
+            return {}
+
         try:
             parsed_packet = json.loads(packet)
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             return {}
-        
+
         return parsed_packet
         # мне кажется долго вручную всё писать
         # а как еще
