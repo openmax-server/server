@@ -1,6 +1,7 @@
 import asyncio, logging, traceback
 from oneme_tcp.proto import Proto
 from oneme_tcp.processors import Processors
+from common.rate_limiter import RateLimiter
 
 class OnemeMobileServer:
     def __init__(self, host="0.0.0.0", port=443, ssl_context=None, db_pool=None, clients={}, send_event=None, telegram_bot=None):
@@ -14,6 +15,9 @@ class OnemeMobileServer:
 
         self.proto = Proto()
         self.processors = Processors(db_pool=db_pool, clients=clients, send_event=send_event, telegram_bot=telegram_bot)
+
+        # rate limiter anti ddos brute force protection here
+        self.auth_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
 
     async def handle_client(self, reader, writer):
         """Функция для обработки подключений"""
@@ -48,14 +52,23 @@ class OnemeMobileServer:
                     case self.proto.SESSION_INIT:
                         deviceType, deviceName = await self.processors.process_hello(payload, seq, writer)
                     case self.proto.AUTH_REQUEST:
-                        await self.processors.process_request_code(payload, seq, writer)
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.AUTH_REQUEST, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            await self.processors.process_request_code(payload, seq, writer)
                     case self.proto.AUTH:
-                        await self.processors.process_verify_code(payload, seq, writer, deviceType, deviceName)
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.AUTH, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            await self.processors.process_verify_code(payload, seq, writer, deviceType, deviceName)
                     case self.proto.LOGIN:
-                        userPhone, userId, hashedToken = await self.processors.process_login(payload, seq, writer)
-                    
-                        if userPhone:
-                            await self._finish_auth(writer, address, userPhone, userId)
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.LOGIN, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            userPhone, userId, hashedToken = await self.processors.process_login(payload, seq, writer)
+
+                            if userPhone:
+                                await self._finish_auth(writer, address, userPhone, userId)
                     case self.proto.LOGOUT:
                         await self.processors.process_logout(seq, writer, hashedToken=hashedToken)
                         break

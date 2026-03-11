@@ -1,6 +1,7 @@
 import asyncio, logging, traceback
 from tamtam_tcp.proto import Proto
 from tamtam_tcp.processors import Processors
+from common.rate_limiter import RateLimiter
 
 class TTMobileServer:
     def __init__(self, host="0.0.0.0", port=443, ssl_context=None, db_pool=None, clients={}, send_event=None):
@@ -14,6 +15,9 @@ class TTMobileServer:
 
         self.proto = Proto()
         self.processors = Processors(db_pool=db_pool, clients=clients, send_event=send_event)
+
+        # rate limiter
+        self.auth_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
 
     async def handle_client(self, reader, writer):
         """Функция для обработки подключений"""
@@ -48,11 +52,20 @@ class TTMobileServer:
                     case self.proto.HELLO:
                         deviceType, deviceName = await self.processors.process_hello(payload, seq, writer)
                     case self.proto.REQUEST_CODE:
-                        await self.processors.process_request_code(payload, seq, writer)
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.REQUEST_CODE, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            await self.processors.process_request_code(payload, seq, writer)
                     case self.proto.VERIFY_CODE:
-                        await self.processors.process_verify_code(payload, seq, writer)
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.VERIFY_CODE, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            await self.processors.process_verify_code(payload, seq, writer)
                     case self.proto.FINAL_AUTH:
-                        await self.processors.process_final_auth(payload, seq, writer, deviceType, deviceName)
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.FINAL_AUTH, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            await self.processors.process_final_auth(payload, seq, writer, deviceType, deviceName)
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
         except Exception as e:
