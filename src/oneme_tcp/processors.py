@@ -122,8 +122,8 @@ class Processors:
         # Извлекаем телефон из пакета
         phone = payload.get("phone").replace("+", "").replace(" ", "").replace("-", "")
 
-        # Генерируем токен с кодом
-        code = str(random.randint(100000, 999999))
+        # Генерируем токен с кодом (безопасность прежде всего)
+        code = str(secrets.randbelow(900000) + 100000)
         token = secrets.token_urlsafe(128)
 
         # Хешируем
