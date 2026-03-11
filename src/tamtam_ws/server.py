@@ -41,7 +41,7 @@ class TTWSServer:
                 case self.proto.SESSION_INIT:
                     # ПРИВЕТ АНДРЕЙ МАЛАХОВ
                     # не не удаляй этот коммент. пусть останется на релизе аххахаха
-                    deviceType, deviceType = await self.processors.process_hello(payload, seq, websocket)
+                    deviceType, deviceName = await self.processors.process_hello(payload, seq, websocket)
                 case self.proto.PING:
                     await self.processors.process_ping(payload, seq, websocket)
                 case self.proto.LOG:
