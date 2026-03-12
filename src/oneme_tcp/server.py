@@ -76,23 +76,23 @@ class OnemeMobileServer:
                         )
                     case self.proto.MSG_SEND:
                         await self.auth_required(
-                            userPhone, self.processors.process_send_message, payload, seq, writer, senderId=userId, db_pool=self.db_pool
+                            userPhone, self.processors.process_send_message, payload, seq, writer, userId, self.db_pool
                         )
                     case self.proto.FOLDERS_GET:
                         await self.auth_required(
-                            userPhone, self.processors.process_get_folders, payload, seq, writer, senderPhone=userPhone
+                            userPhone, self.processors.process_get_folders, payload, seq, writer, userPhone
                         )
                     case self.proto.SESSIONS_INFO:
                         await self.auth_required(
-                            userPhone, self.processors.process_get_sessions, payload, seq, writer, senderPhone=userPhone, hashedToken=hashedToken
+                            userPhone, self.processors.process_get_sessions, payload, seq, writer, userPhone, hashedToken
                         )
                     case self.proto.CHAT_INFO:
                         await self.auth_required(
-                            userPhone, self.processors.process_search_chats, payload, seq, writer, senderId=userId
+                            userPhone, self.processors.process_search_chats, payload, seq, writer, userId
                         )
                     case self.proto.CONTACT_INFO_BY_PHONE:
                         await self.auth_required(
-                            userPhone, self.processors.process_search_by_phone, payload, seq, writer, senderId=userId
+                            userPhone, self.processors.process_search_by_phone, payload, seq, writer, userId
                         )
                     case self.proto.OK_TOKEN:
                         await self.auth_required(
@@ -100,7 +100,7 @@ class OnemeMobileServer:
                         )
                     case self.proto.MSG_TYPING:
                         await self.auth_required(
-                            userPhone, self.processors.process_typing, payload, seq, writer, senderId=userId
+                            userPhone, self.processors.process_typing, payload, seq, writer, userId
                         )
                     case self.proto.CONTACT_INFO:
                         await self.auth_required(

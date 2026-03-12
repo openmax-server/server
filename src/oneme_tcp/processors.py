@@ -436,11 +436,6 @@ class Processors:
         cid = message.get("cid") or 0
         text = message.get("text") or ""
 
-        # Если клиент вообще ничего не указал в пакете, то выбрасываем ошибку
-        if not all([userId, chatId, elements, attaches, cid, text]):
-            await self._send_error(seq, self.proto.MSG_SEND, self.error_types.INVALID_PAYLOAD, writer)
-            return
-
         # Время отправки сообщения
         messageTime = int(time.time() * 1000)
 
