@@ -5,3 +5,4 @@ lz4
 websockets
 pydantic
 aiosqlite
+python-dotenv
