@@ -43,8 +43,8 @@ class ServerConfig:
     ### Telegram bot
     telegram_bot_token = os.getenv("telegram_bot_token") or "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     telegram_bot_enabled = bool(os.getenv("telegram_bot_enabled")) or True
-    telegram_whitelist_enabled = boot(os.getenv("telegram_whitelist_enabled")) or False 
-    telegram_blacklist_enabled = boot(os.getenv("telegram_blacklist_enabled")) or False 
+    telegram_whitelist_enabled = bool(os.getenv("telegram_whitelist_enabled")) or False 
+    telegram_blacklist_enabled = bool(os.getenv("telegram_blacklist_enabled")) or False 
     
     telegram_whitelist_ids = [x.strip() for x in os.getenv("telegram_whitelist_ids", "").split(",") if x.strip()]
     telegram_blacklist_ids = [x.strip() for x in os.getenv("telegram_blacklist_ids", "").split(",") if x.strip()]
