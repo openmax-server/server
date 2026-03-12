@@ -1,9 +1,8 @@
 pyTelegramBotAPI
 aiomysql
-python-dotenv
 msgpack
 lz4
 websockets
 pydantic
-aiohttp
 aiosqlite
+python-dotenv

@@ -12,6 +12,7 @@ class Static:
         INVALID_TOKEN = "invalid_token"
         CHAT_NOT_FOUND = "chat_not_found"
         CHAT_NOT_ACCESS = "chat_not_access"
+        RATE_LIMITED = "rate_limited"
 
     class ChatTypes:
         DIALOG = "DIALOG"
@@ -73,6 +74,12 @@ class Static:
             "error": "chat.not.access",
             "message": "Chat not access",
             "title": "Нет доступа к чату"
+        },
+        "rate_limited": {
+            "localizedMessage": "Слишком много попыток. Повторите позже",
+            "error": "error.rate_limited",
+            "message": "Too many attempts. Please try again later",
+            "title": "Слишком много попыток"
         }
     }
 

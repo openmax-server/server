@@ -1,6 +1,7 @@
 import asyncio, logging, traceback
 from oneme_tcp.proto import Proto
 from oneme_tcp.processors import Processors
+from common.rate_limiter import RateLimiter
 from common.tools import Tools
 
 class OnemeMobileServer:
@@ -17,6 +18,12 @@ class OnemeMobileServer:
         self.auth_required = Tools().auth_required
         self.processors = Processors(db_pool=db_pool, clients=clients, send_event=send_event, telegram_bot=telegram_bot)
 
+        # rate limiter anti ddos brute force protection
+        self.auth_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
+
+        self.read_timeout = 300 # Таймаут чтения из сокета (секунды)
+        self.max_read_size = 65536 # Максимальный размер данных из сокета
+
     async def handle_client(self, reader, writer):
         """Функция для обработки подключений"""
         # IP-адрес клиента
@@ -32,15 +39,32 @@ class OnemeMobileServer:
 
         try:
             while True:
-                # Читаем новые данные из сокета
-                data = await reader.read(4098)
+                # Читаем новые данные из сокета с таймаутом
+                try:
+                    data = await asyncio.wait_for(
+                        reader.read(self.max_read_size),
+                        timeout=self.read_timeout
+                    )
+                except asyncio.TimeoutError:
+                    self.logger.info(f"Таймаут соединения для {address[0]}:{address[1]}")
+                    break
 
                 # Если сокет закрыт - выходим из цикла
                 if not data:
                     break
 
+                
+                if len(data) > self.max_read_size:
+                    self.logger.warning(f"Пакет от {address[0]}:{address[1]} превышает лимит ({len(data)} байт)")
+                    break
+
                 # Распаковываем данные
                 packet = self.proto.unpack_packet(data)
+
+                # Скип если пакет невалидный 
+                if packet is None:
+                    self.logger.warning(f"Невалидный пакет от {address[0]}:{address[1]}")
+                    continue
 
                 opcode = packet.get("opcode")
                 seq = packet.get("seq")
@@ -50,15 +74,23 @@ class OnemeMobileServer:
                     case self.proto.SESSION_INIT:
                         deviceType, deviceName = await self.processors.process_hello(payload, seq, writer)
                     case self.proto.AUTH_REQUEST:
-                        await self.processors.process_request_code(payload, seq, writer)
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.AUTH_REQUEST, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            await self.processors.process_request_code(payload, seq, writer)
                     case self.proto.AUTH:
-                        await self.processors.process_verify_code(payload, seq, writer, deviceType, deviceName)
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.AUTH, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            await self.processors.process_verify_code(payload, seq, writer, deviceType, deviceName)
                     case self.proto.LOGIN:
-                        userPhone, userId, hashedToken = await self.processors.process_login(payload, seq, writer)
-                    
-                        # Если авторизация на сервере успешная - можем завершить авторизацию
-                        if userPhone:
-                            await self._finish_auth(writer, address, userPhone, userId)
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.LOGIN, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            userPhone, userId, hashedToken = await self.processors.process_login(payload, seq, writer)
+
+                            if userPhone:
+                                await self._finish_auth(writer, address, userPhone, userId)
                     case self.proto.LOGOUT:
                         await self.processors.process_logout(seq, writer, hashedToken=hashedToken)
                         break

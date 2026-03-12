@@ -1,4 +1,4 @@
-import json, random, secrets, hashlib, time, logging
+import json, secrets, hashlib, time, logging
 from oneme_tcp.models import *
 from oneme_tcp.proto import Proto
 from oneme_tcp.config import OnemeConfig
@@ -125,8 +125,8 @@ class Processors:
         # Извлекаем телефон из пакета
         phone = payload.get("phone").replace("+", "").replace(" ", "").replace("-", "")
 
-        # Генерируем токен с кодом
-        code = str(random.randint(100000, 999999))
+        # Генерируем токен с кодом (безопасность прежде всего)
+        code = str(secrets.randbelow(900000) + 100000)
         token = secrets.token_urlsafe(128)
 
         # Хешируем
@@ -218,7 +218,7 @@ class Processors:
                 # Создаем сессию
                 await cursor.execute(
                     "INSERT INTO tokens (phone, token_hash, device_type, device_name, location, time) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (stored_token.get("phone"), hashed_login, deviceType, deviceName, "Epstein Island", int(time.time()),)    
+                    (stored_token.get("phone"), hashed_login, deviceType, deviceName, "Little Saint James Island", int(time.time()),)   # весь покрытый зеленью, абсолютно весь, остров невезения в океане есть 
                 )
 
         # Генерируем профиль
@@ -680,10 +680,12 @@ class Processors:
                         chat = await cursor.fetchone()
                         
                         if chat:
-                            # Если чат - диалог, и пользователь в нем не состоит,
-                            # то продолжаем без добавления результата
-                            if chat.get("type") == self.chat_types.DIALOG and senderId not in json.loads(chat.get("participants")):
-                                continue 
+                            # Проверяем, является ли пользователь участником чата
+
+                            # (в max нельзя смотреть и отправлять сообщения в чат, в котором ты не участник, в отличие от tg (например, комментарии в каналах),
+                            # так что надо тоже так делать)
+                            if senderId not in json.loads(chat.get("participants")):
+                                continue
 
                             # Получаем последнее сообщение из чата
                             message, messageTime = await self.tools.get_last_message(
