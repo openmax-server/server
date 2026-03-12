@@ -90,6 +90,8 @@ class OnemeMobileServer:
         except Exception as e:
             self.logger.error(f"Произошла ошибка при работе с клиентом {address[0]}:{address[1]}: {e}")
             traceback.print_exc()
+        except AttributeError:
+            self.logger.error(f"Повреждённый пакет от клиента {address[0]}:{address[1]}, пропускаю")
 
         # Удаляем клиента из словаря
         if userPhone:
