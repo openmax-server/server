@@ -13,6 +13,7 @@ class TelegramBot:
         self.enabled = enabled
         self.db_pool = db_pool
         self.whitelist_ids = whitelist_ids if whitelist_ids is not None else []
+        self.blacklist_ids = blacklist_ids if blacklist_ids is not None else []
         self.logger = logging.getLogger(__name__)
 
         self.msg_types = Static().BotMessageTypes()
@@ -46,11 +47,16 @@ class TelegramBot:
         async def handle_register(message):
             tg_id = str(message.from_user.id)
             
-            # Проверка ID на наличие в белом списке
-            if tg_id not in self.whitelist_ids:
-                await self.bot.send_message(message.chat.id, self.get_bot_message(self.msg_types.ID_NOT_WHITELISTED))
-                return
-            
+            # Проверка ID на наличие в белом списке и в чёрном списке
+            if whitelist_enabled:
+                if tg_id not in self.whitelist_ids:
+                    await self.bot.send_message(message.chat.id, self.get_bot_message(self.msg_types.ID_NOT_WHITELISTED))
+                    return
+            elif blacklist_enabled:
+                if tg_id in self.blacklist_ids:
+                    await self.bot.send_message(message.chat.id, self.get_bot_message(self.msg_types.ID_BLACKLISTED))
+                    return
+                
             async with self.db_pool.acquire() as conn:
                 async with conn.cursor() as cursor:
                     # Проверка на существование
