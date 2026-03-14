@@ -9,7 +9,7 @@ class Tools:
         photoId=None, updateTime=0,
         firstName="Test", lastName="Account", options=[], 
         description=None, accountStatus=0, profileOptions=[], 
-        includeProfileOptions=True, username=None
+        includeProfileOptions=True, username=None, type="ONEME"
     ):
         contact = {
             "id": id,
