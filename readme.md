@@ -24,3 +24,6 @@ https://t.me/openmax_alerts
 # Дополнительная информация
 [Faq](faq/readme.md)
 [Открытые сервера](faq/servers.md)
+
+А также:
+![Я по мужикам](https://i.imgur.com/ZX2dkxE.jpeg)
