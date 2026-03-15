@@ -48,3 +48,6 @@ class ServerConfig:
 
     ### origins
     origins = [x.strip() for x in os.getenv("origins", "").split(",") if x.strip()] if os.getenv("origins") else None
+
+    ### sms шлюз
+    sms_gateway_url = os.getenv("sms_gateway_url") or "http://127.0.0.1/sms-gateway"

@@ -83,6 +83,13 @@ class OnemeMobileServer:
                             await self.processors._send_error(seq, self.proto.AUTH, self.processors.error_types.RATE_LIMITED, writer)
                         else:
                             await self.processors.process_verify_code(payload, seq, writer, deviceType, deviceName)
+                    case self.proto.AUTH_CONFIRM:
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.AUTH_CONFIRM, self.processors.error_types.RATE_LIMITED, writer)
+                        elif payload and payload.get("tokenType") == "REGISTER":
+                            await self.processors.process_auth_confirm(payload, seq, writer, deviceType, deviceName)
+                        else:
+                            self.logger.warning(f"AUTH_CONFIRM с неизвестным tokenType: {payload}")
                     case self.proto.LOGIN:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
                             await self.processors._send_error(seq, self.proto.LOGIN, self.processors.error_types.RATE_LIMITED, writer)

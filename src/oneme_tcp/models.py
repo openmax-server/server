@@ -99,3 +99,27 @@ class UpdateProfilePayloadModel(pydantic.BaseModel):
     description: str = None
     firstName: str = None
     lastName: str = None
+
+class AuthConfirmRegisterPayloadModel(pydantic.BaseModel):
+    token: str
+    firstName: str
+    lastName: str = None
+    tokenType: str
+
+    @pydantic.field_validator('firstName')
+    def validate_first_name(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError('firstName must not be empty')
+        if len(v) > 59:
+            raise ValueError('firstName too long')
+        return v
+
+    @pydantic.field_validator('lastName')
+    def validate_last_name(cls, v):
+        if v is None:
+            return v
+        v = v.strip()
+        if len(v) > 59:
+            raise ValueError('lastName too long')
+        return v

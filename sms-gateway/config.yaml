@@ -1,0 +1,34 @@
+providers:
+  sms_api:
+    type: sms_api
+    enabled: false
+    base_url: "http://localhost:8000"
+    send_endpoint: "/auth/code"
+    timeout: 10
+
+  lk_api:
+    type: lk_api
+    enabled: true
+
+routing:
+  rules:
+    - name: "Russia"
+      prefixes: ["+7"]
+      provider: "sms_api"
+      fallback: "lk_api"
+
+  default_provider: "lk_api"
+  default_fallback: null
+
+settings:
+  log_codes: true
+  code_ttl_seconds: 300
+  rate_limit:
+    enabled: true
+    max_attempts: 3
+    window_seconds: 600
+
+redis:
+  host: "redis"
+  port: 6379
+  db: 0

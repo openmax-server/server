@@ -5,4 +5,6 @@ lz4
 websockets
 pydantic
 aiosqlite
+aiohttp
 python-dotenv
+cryptography

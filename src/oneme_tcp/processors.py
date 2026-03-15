@@ -5,6 +5,7 @@ from oneme_tcp.config import OnemeConfig
 from common.tools import Tools
 from common.config import ServerConfig
 from common.static import Static
+from common.sms import send_sms_code
 
 class Processors:
     def __init__(self, db_pool=None, clients={}, send_event=None, telegram_bot=None):
@@ -114,7 +115,6 @@ class Processors:
 
     async def process_request_code(self, payload, seq, writer):
         """Обработчик запроса кода"""
-        # Валидируем данные пакета
         try:
             RequestCodePayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
@@ -125,32 +125,55 @@ class Processors:
         # Извлекаем телефон из пакета
         phone = payload.get("phone").replace("+", "").replace(" ", "").replace("-", "")
 
-        # Генерируем токен с кодом (безопасность прежде всего)
-        code = str(secrets.randbelow(900000) + 100000)
+        # Генерируем токен
         token = secrets.token_urlsafe(128)
-
-        # Хешируем
-        code_hash = hashlib.sha256(code.encode()).hexdigest()
         token_hash = hashlib.sha256(token.encode()).hexdigest()
 
         # Время истечения токена
         expires = int(time.time()) + 300
 
-        # Ищем пользователя, и если он существует, сохраняем токен
+        user_exists = False
+
+        # Ищем пользователя
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute("SELECT * FROM users WHERE phone = %s", (phone,))
                 user = await cursor.fetchone()
 
-                # Если пользователя найден - сохраняем токен и отправляем код
+        # Получаем код через SMS шлюз или генерируем локально (безопасность прежде всего)
+        if self.config.sms_gateway_url:
+            code = await send_sms_code(self.config.sms_gateway_url, phone)
+            if code is None:
+                await self._send_error(seq, self.proto.AUTH_REQUEST, self.error_types.INVALID_PAYLOAD, writer)
+                return
+        else:
+            code = str(secrets.randbelow(900000) + 100000)
+
+        # Хешируем
+        code_hash = hashlib.sha256(code.encode()).hexdigest()
+
+        # Сохраняем токен и если нужно отправляем код через тг
+        async with self.db_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
                 if user:
+                    user_exists = True
                     # Сохраняем токен
-                    await cursor.execute("INSERT INTO auth_tokens (phone, token_hash, code_hash, expires) VALUES (%s, %s, %s, %s)", (phone, token_hash, code_hash, expires,))
+                    await cursor.execute(
+                        "INSERT INTO auth_tokens (phone, token_hash, code_hash, expires) VALUES (%s, %s, %s, %s)",
+                        (phone, token_hash, code_hash, expires,)
+                    )
 
                     # Если тг бот включен, и тг привязан к аккаунту - отправляем туда сообщение
-                    if self.telegram_bot and user.get("telegram_id"):
+                    if not self.config.sms_gateway_url and self.telegram_bot and user.get("telegram_id"):
                         await self.telegram_bot.send_code(chat_id=int(user.get("telegram_id")), phone=phone, code=code)
-                    
+                else:
+                    # Пользователь не найден - сохраняем токен со state='register'
+                    # чтобы после верификации кода направить на экран регистрации
+                    await cursor.execute(
+                        "INSERT INTO auth_tokens (phone, token_hash, code_hash, expires, state) VALUES (%s, %s, %s, %s, %s)",
+                        (phone, token_hash, code_hash, expires, "register",)
+                    )
+
         # Данные пакета
         payload = {
             "requestMaxDuration": 60000,
@@ -167,11 +190,10 @@ class Processors:
 
         # Отправляем
         await self._send(writer, packet)
-        self.logger.debug(f"Код для {phone}: {code}")
+        self.logger.debug(f"Код для {phone}: {code} (существующий={user_exists})")
 
     async def process_verify_code(self, payload, seq, writer, deviceType, deviceName):
         """Обработчик проверки кода"""
-        # Валидируем данные пакета
         try:
             VerifyCodePayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
@@ -195,7 +217,10 @@ class Processors:
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 # Ищем токен
-                await cursor.execute("SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()", (hashed_token,))
+                await cursor.execute(
+                    "SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()",
+                    (hashed_token,)
+                )
                 stored_token = await cursor.fetchone()
 
                 # Если токен просрочен, или его нет - отправляем ошибку
@@ -207,7 +232,28 @@ class Processors:
                 if stored_token.get("code_hash") != hashed_code:
                     await self._send_error(seq, self.proto.AUTH, self.error_types.INVALID_CODE, writer)
                     return
-                
+
+                # Если это новый пользователь - переводим токен в state='verified'
+                # и отдаём клиенту REGISTER токен, чтобы он показал экран ввода имени
+                if stored_token.get("state") == "register":
+                    await cursor.execute(
+                        "UPDATE auth_tokens SET state = %s WHERE token_hash = %s",
+                        ("verified", hashed_token,)
+                    )
+                    packet = self.proto.pack_packet(
+                        cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.AUTH,
+                        payload={
+                            "tokenAttrs": {
+                                "REGISTER": {
+                                    "token": token
+                                }
+                            },
+                            "presetAvatars": []
+                        }
+                    )
+                    await self._send(writer, packet)
+                    return
+
                 # Ищем аккаунт
                 await cursor.execute("SELECT * FROM users WHERE phone = %s", (stored_token.get("phone"),))
                 account = await cursor.fetchone()
@@ -218,7 +264,7 @@ class Processors:
                 # Создаем сессию
                 await cursor.execute(
                     "INSERT INTO tokens (phone, token_hash, device_type, device_name, location, time) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (stored_token.get("phone"), hashed_login, deviceType, deviceName, "Little Saint James Island", int(time.time()),)   # весь покрытый зеленью, абсолютно весь, остров невезения в океане есть 
+                    (stored_token.get("phone"), hashed_login, deviceType, deviceName, "Little Saint James Island", int(time.time()),)   # весь покрытый зеленью, абсолютно весь, остров невезения в океане есть
                 )
 
         # Генерируем профиль
@@ -258,6 +304,129 @@ class Processors:
 
         # Отправляем
         await self._send(writer, packet)
+
+    async def process_auth_confirm(self, payload, seq, writer, deviceType, deviceName):
+        """Обработчик подтверждения регистрации нового пользователя"""
+        # Валидируем данные пакета
+        try:
+            AuthConfirmRegisterPayloadModel.model_validate(payload)
+        except pydantic.ValidationError as error:
+            self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
+            await self._send_error(seq, self.proto.AUTH_CONFIRM, self.error_types.INVALID_PAYLOAD, writer)
+            return
+
+        # Извлекаем данные из пакета
+        token = payload.get("token")
+        first_name = payload.get("firstName").strip()
+        last_name = (payload.get("lastName") or "").strip()
+
+        # Хешируем токен
+        hashed_token = hashlib.sha256(token.encode()).hexdigest()
+
+        # Генерируем постоянный логин-токен
+        login = secrets.token_urlsafe(128)
+        hashed_login = hashlib.sha256(login.encode()).hexdigest()
+
+        async with self.db_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                # Ищем токен - он должен быть в state='verified'
+                await cursor.execute(
+                    "SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP() AND state = %s",
+                    (hashed_token, "verified",)
+                )
+                stored_token = await cursor.fetchone()
+
+                # Если токен не найден или просрочен - отправляем ошибку
+                if stored_token is None:
+                    await self._send_error(seq, self.proto.AUTH_CONFIRM, self.error_types.CODE_EXPIRED, writer)
+                    return
+
+                phone = stored_token.get("phone")
+
+                # Проверяем что пользователь с таким телефоном ещё не существует
+                await cursor.execute("SELECT id FROM users WHERE phone = %s", (phone,))
+                if await cursor.fetchone():
+                    await self._send_error(seq, self.proto.AUTH_CONFIRM, self.error_types.INVALID_PAYLOAD, writer)
+                    return
+
+                now_ms = int(time.time() * 1000)
+                now_s = int(time.time())
+
+                # Создаем пользователя
+                await cursor.execute(
+                    """
+                    INSERT INTO users
+                        (phone, telegram_id, firstname, lastname, username,
+                        profileoptions, options, accountstatus, updatetime, lastseen)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        phone, None, first_name, last_name, None,
+                        json.dumps([]), json.dumps(["ONEME"]),
+                        0, str(now_ms), str(now_s),
+                    )
+                )
+
+                user_id = cursor.lastrowid
+
+                # Добавляем данные аккаунта
+                await cursor.execute(
+                    """
+                    INSERT INTO user_data
+                        (phone, chats, contacts, folders, user_config, chat_config)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        phone,
+                        json.dumps([]), json.dumps([]),
+                        json.dumps(self.static.USER_FOLDERS),
+                        json.dumps(self.static.USER_SETTINGS),
+                        json.dumps({}),
+                    )
+                )
+
+                # Удаляем токен
+                await cursor.execute("DELETE FROM auth_tokens WHERE token_hash = %s", (hashed_token,))
+
+                # Создаем сессию
+                await cursor.execute(
+                    "INSERT INTO tokens (phone, token_hash, device_type, device_name, location, time) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (phone, hashed_login, deviceType or "ANDROID", deviceName or "Unknown", "Little Saint James Island", now_s,)
+                )
+
+        # Генерируем профиль
+        profile = self.tools.generate_profile(
+            id=user_id,
+            phone=int(phone),
+            avatarUrl=None,
+            photoId=None,
+            updateTime=now_ms,
+            firstName=first_name,
+            lastName=last_name,
+            options=["ONEME"],
+            description=None,
+            accountStatus=0,
+            profileOptions=[],
+            includeProfileOptions=True,
+            username=None
+        )
+
+        # Собираем данные пакета
+        payload = {
+            "userToken": "0",
+            "profile": profile,
+            "tokenType": "LOGIN",
+            "token": login
+        }
+
+        # Создаем пакет
+        packet = self.proto.pack_packet(
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.AUTH_CONFIRM, payload=payload
+        )
+
+        # Отправляем
+        await self._send(writer, packet)
+        self.logger.info(f"Новый пользователь зарегистрирован: phone={phone} id={user_id} name={first_name} {last_name}")
 
     async def process_login(self, payload, seq, writer):
         """Обработчик авторизации клиента на сервере"""
@@ -893,7 +1062,6 @@ class Processors:
 
         # Отправляем пакет
         await self._send(writer, packet)
-
 
     async def process_update_profile(self, payload, seq, writer, userId, userPhone):
         # Валидируем входные данные
