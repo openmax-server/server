@@ -27,7 +27,7 @@ async def init_db():
     elif server_config.db_type == "sqlite":
         import aiosqlite
         raw_db = await aiosqlite.connect(server_config.db_file)
-        db["acquire"] = raw_db
+        db["acquire"] = lambda: raw_db
 
     # Возвращаем
     return db
