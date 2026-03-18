@@ -289,3 +289,104 @@ class Processors:
 
         # Отправялем
         await self._send(writer, packet)
+
+    async def process_login(self, payload, seq, writer):
+        """Обработчик авторизации клиента на сервере"""
+        # Валидируем данные пакета
+        try:
+            LoginPayloadModel.model_validate(payload)
+        except pydantic.ValidationError as error:
+            self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
+            await self._send_error(seq, self.proto.LOGIN, self.error_types.INVALID_PAYLOAD, writer)
+            return
+        
+        # Получаем данные из пакета
+        token = payload.get("token")
+
+        # Хешируем токен
+        hashed_token = hashlib.sha256(token.encode()).hexdigest()
+
+        # Ищем токен в бд
+        async with self.db_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("SELECT * FROM tokens WHERE token_hash = %s", (hashed_token,))
+                token_data = await cursor.fetchone()
+
+                # Если токен не найден, отправляем ошибку
+                if token_data is None:
+                    await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.INVALID_TOKEN, writer)
+                    return
+
+                # Ищем аккаунт пользователя в бд
+                await cursor.execute("SELECT * FROM users WHERE phone = %s", (token_data.get("phone"),))
+                user = await cursor.fetchone()
+
+                # Ищем данные пользователя в бд
+                await cursor.execute("SELECT * FROM user_data WHERE phone = %s", (token_data.get("phone"),))
+                user_data = await cursor.fetchone()
+
+        # Аватарка с биографией
+        photo_id = None if not user.get("avatar_id") else int(user.get("avatar_id"))
+        avatar_url = None if not photo_id else self.config.avatar_base_url + photo_id
+        description = None if not user.get("description") else user.get("description")
+
+        # Генерируем профиль
+        profile = self.tools.generate_profile_tt(
+            id=user.get("id"),
+            phone=int(user.get("phone")),
+            avatarUrl=avatar_url,
+            photoId=photo_id,
+            updateTime=int(user.get("updatetime")),
+            firstName=user.get("firstname"),
+            lastName=user.get("lastname"),
+            options=json.loads(user.get("options")),
+            description=description,
+            username=user.get("username")
+        )
+
+        chats = await self.tools.generate_chats(
+            json.loads(user_data.get("chats")),
+            self.db_pool, user.get("id")
+        )
+
+        # Формируем данные пакета
+        payload = {
+            "profile": profile,
+            "chats": chats,
+            "chatMarker": 0,
+            "messages": {},
+            "contacts": [],
+            "presence": {},
+            "config": {
+                "hash": "0",
+                "server": {},
+                "user": json.loads(user_data.get("user_config")),
+                "chatFolders": {
+                    "FOLDERS": [],
+                    "ALL_FILTER_EXCLUDE": []
+                }
+            },
+            "token": token,
+            "calls": [],
+            "videoChatHistory": False,
+            "drafts": {
+            "chats": {
+                "discarded": {},
+                "saved": {}
+            },
+            "users": {
+                "discarded": {},
+                "saved": {}
+            }
+            },
+            "time": int(time.time() * 1000)
+        }
+
+        # Собираем пакет
+        packet = self.proto.pack_packet(
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.LOGIN, payload=payload
+        )
+
+        # Отправляем
+        await self._send(writer, packet)
+        return int(user.get("phone")), int(user.get("id")), hashed_token

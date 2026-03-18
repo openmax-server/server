@@ -86,6 +86,14 @@ class TTMobileServer:
                             await self.processors._send_error(seq, self.proto.FINAL_AUTH, self.processors.error_types.RATE_LIMITED, writer)
                         else:
                             await self.processors.process_final_auth(payload, seq, writer, deviceType, deviceName)
+                    case self.proto.LOGIN:
+                        if not self.auth_rate_limiter.is_allowed(address[0]):
+                            await self.processors._send_error(seq, self.proto.LOGIN, self.processors.error_types.RATE_LIMITED, writer)
+                        else:
+                            userPhone, userId, hashedToken = await self.processors.process_login(payload, seq, writer)
+
+                            if userPhone:
+                                await self._finish_auth(writer, address, userPhone, userId)
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
         except Exception as e:
@@ -94,6 +102,50 @@ class TTMobileServer:
 
         writer.close()
         self.logger.info(f"Прекратил работать работать с клиентом {address[0]}:{address[1]}")
+
+    async def _finish_auth(self, writer, addr, phone, id):
+        """Завершение открытия сессии"""
+        # Ищем пользователя в словаре
+        user = self.clients.get(id)
+
+        # Добавляем новое подключение в словарь
+        if user:
+            user["clients"].append(
+                {
+                    "writer": writer,
+                    "ip": addr[0],
+                    "port": addr[1],
+                    "protocol": "oneme_mobile"
+                }
+            )
+        else:
+            self.clients[id] = {
+                "phone": phone,
+                "id": id,
+                "clients": [
+                    {
+                        "writer": writer,
+                        "ip": addr[0],
+                        "port": addr[1],
+                        "protocol": "oneme_mobile"
+                    }
+                ]
+            }
+
+    async def _end_session(self, id, ip, port):
+        """Завершение сессии"""
+        # Получаем пользователя в списке
+        user = self.clients.get(id)
+        if not user:
+            return
+
+        # Получаем подключения пользователя
+        clients = user.get("clients", [])
+
+        # Удаляем нужное подключение из словаря
+        for i, client in enumerate(clients):
+            if (client.get("ip"), client.get("port")) == (ip, port):
+                clients.pop(i)
 
     async def start(self):
         """Функция для запуска сервера"""

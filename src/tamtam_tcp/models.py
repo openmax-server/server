@@ -28,3 +28,7 @@ class FinalAuthPayloadModel(pydantic.BaseModel):
     tokenType: str
     deviceId: str
     token: str
+
+class LoginPayloadModel(pydantic.BaseModel):
+    interactive: bool
+    token: str
