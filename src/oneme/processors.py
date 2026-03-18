@@ -1,18 +1,24 @@
-import json, secrets, hashlib, time, logging
-from oneme_tcp.models import *
-from oneme_tcp.proto import Proto
-from oneme_tcp.config import OnemeConfig
+import json
+import secrets
+import hashlib
+import time
+import logging
+from oneme.models import *
+from common.proto_tcp import MobileProto
+from common.proto_web import WebProto
+from common.opcodes import Opcodes
+from oneme.config import OnemeConfig
 from common.tools import Tools
 from common.config import ServerConfig
 from common.static import Static
 from common.sms import send_sms_code
 
 class Processors:
-    def __init__(self, db_pool=None, clients={}, send_event=None, telegram_bot=None):
-        self.proto = Proto()
+    def __init__(self, db_pool=None, clients={}, send_event=None, telegram_bot=None, type="socket"):
         self.tools = Tools()
         self.config = ServerConfig()
         self.static = Static()
+        self.opcodes = Opcodes()
         self.server_config = OnemeConfig().SERVER_CONFIG
         self.error_types = self.static.ErrorTypes()
         self.chat_types = self.static.ChatTypes()
@@ -22,6 +28,11 @@ class Processors:
         self.clients = clients
         self.telegram_bot = telegram_bot
         self.logger = logging.getLogger(__name__)
+
+        if type == "socket":
+            self.proto = MobileProto()
+        elif type == "web":
+            self.proto = WebProto()
 
     async def _send(self, writer, packet):
         try:
@@ -44,14 +55,14 @@ class Processors:
         
         await self._send(writer, packet)
 
-    async def process_hello(self, payload, seq, writer):
+    async def session_init(self, payload, seq, writer):
         """Обработчик приветствия"""
         # Валидируем данные пакета
         try:
             HelloPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.SESSION_INIT, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.SESSION_INIT, self.error_types.INVALID_PAYLOAD, writer)
             return None, None
 
         # Получаем данные из пакета
@@ -76,50 +87,50 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.SESSION_INIT, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.SESSION_INIT, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
         return deviceType, deviceName
     
-    async def process_ping(self, payload, seq, writer):
+    async def ping(self, payload, seq, writer):
         """Обработчик пинга"""
         # Валидируем данные пакета
         try:
             PingPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.PING, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.PING, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Собираем пакет
         response = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.PING, payload=None
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.PING, payload=None
         )
 
         # Отправляем
         await self._send(writer, response)
 
-    async def process_telemetry(self, payload, seq, writer):
+    async def log(self, payload, seq, writer):
         """Обработчик телеметрии"""
         # TODO: можно было бы реализовать валидацию телеметрии, но сейчас это не особо важно
 
         # Собираем пакет
         response = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.LOG, payload=None
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.LOG, payload=None
         )
 
         # Отправляем
         await self._send(writer, response)
 
-    async def process_request_code(self, payload, seq, writer):
+    async def auth_request(self, payload, seq, writer):
         """Обработчик запроса кода"""
         try:
             RequestCodePayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.AUTH_REQUEST, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.AUTH_REQUEST, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем телефон из пакета
@@ -185,20 +196,20 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.AUTH_REQUEST, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.AUTH_REQUEST, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
         self.logger.debug(f"Код для {phone}: {code} (существующий={user_exists})")
 
-    async def process_verify_code(self, payload, seq, writer, deviceType, deviceName):
+    async def auth(self, payload, seq, writer, deviceType, deviceName):
         """Обработчик проверки кода"""
         try:
             VerifyCodePayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.AUTH, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.AUTH, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем данные из пакета
@@ -225,12 +236,12 @@ class Processors:
 
                 # Если токен просрочен, или его нет - отправляем ошибку
                 if stored_token is None:
-                    await self._send_error(seq, self.proto.AUTH, self.error_types.CODE_EXPIRED, writer)
+                    await self._send_error(seq, self.opcodes.AUTH, self.error_types.CODE_EXPIRED, writer)
                     return
 
                 # Проверяем код
                 if stored_token.get("code_hash") != hashed_code:
-                    await self._send_error(seq, self.proto.AUTH, self.error_types.INVALID_CODE, writer)
+                    await self._send_error(seq, self.opcodes.AUTH, self.error_types.INVALID_CODE, writer)
                     return
 
                 # Если это новый пользователь - переводим токен в state='verified'
@@ -241,7 +252,7 @@ class Processors:
                         ("verified", hashed_token,)
                     )
                     packet = self.proto.pack_packet(
-                        cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.AUTH,
+                        cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.AUTH,
                         payload={
                             "tokenAttrs": {
                                 "REGISTER": {
@@ -299,20 +310,20 @@ class Processors:
 
         # Создаем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.AUTH, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.AUTH, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
 
-    async def process_auth_confirm(self, payload, seq, writer, deviceType, deviceName):
+    async def auth_confirm(self, payload, seq, writer, deviceType, deviceName):
         """Обработчик подтверждения регистрации нового пользователя"""
         # Валидируем данные пакета
         try:
             AuthConfirmRegisterPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.AUTH_CONFIRM, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.AUTH_CONFIRM, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем данные из пакета
@@ -338,7 +349,7 @@ class Processors:
 
                 # Если токен не найден или просрочен - отправляем ошибку
                 if stored_token is None:
-                    await self._send_error(seq, self.proto.AUTH_CONFIRM, self.error_types.CODE_EXPIRED, writer)
+                    await self._send_error(seq, self.opcodes.AUTH_CONFIRM, self.error_types.CODE_EXPIRED, writer)
                     return
 
                 phone = stored_token.get("phone")
@@ -346,7 +357,7 @@ class Processors:
                 # Проверяем что пользователь с таким телефоном ещё не существует
                 await cursor.execute("SELECT id FROM users WHERE phone = %s", (phone,))
                 if await cursor.fetchone():
-                    await self._send_error(seq, self.proto.AUTH_CONFIRM, self.error_types.INVALID_PAYLOAD, writer)
+                    await self._send_error(seq, self.opcodes.AUTH_CONFIRM, self.error_types.INVALID_PAYLOAD, writer)
                     return
 
                 now_ms = int(time.time() * 1000)
@@ -421,21 +432,21 @@ class Processors:
 
         # Создаем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.AUTH_CONFIRM, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.AUTH_CONFIRM, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
         self.logger.info(f"Новый пользователь зарегистрирован: phone={phone} id={user_id} name={first_name} {last_name}")
 
-    async def process_login(self, payload, seq, writer):
+    async def login(self, payload, seq, writer):
         """Обработчик авторизации клиента на сервере"""
         # Валидируем данные пакета
         try:
             LoginPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.LOGIN, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.LOGIN, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # Получаем данные из пакета
@@ -452,7 +463,7 @@ class Processors:
 
                 # Если токен не найден, отправляем ошибку
                 if token_data is None:
-                    await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.INVALID_TOKEN, writer)
+                    await self._send_error(seq, self.opcodes.LOGIN, self.error_types.INVALID_TOKEN, writer)
                     return
 
                 # Ищем аккаунт пользователя в бд
@@ -509,14 +520,14 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.LOGIN, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.LOGIN, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
         return int(user.get("phone")), int(user.get("id")), hashed_token
 
-    async def process_logout(self, seq, writer, hashedToken):
+    async def logout(self, seq, writer, hashedToken):
         """Обработчик завершения сессии"""
         # Удаляем токен из бд
         async with self.db_pool.acquire() as conn:
@@ -525,20 +536,20 @@ class Processors:
         
         # Создаем пакет
         response = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.LOGOUT, payload=None
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.LOGOUT, payload=None
         )
 
         # Отправляем
         await self._send(writer, response)
 
-    async def process_get_assets(self, payload, seq, writer):
+    async def assets_update(self, payload, seq, writer):
         """Обработчик запроса ассетов клиента на сервере"""
         # Валидируем данные пакета
         try:
             AssetsPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.ASSETS_UPDATE, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.ASSETS_UPDATE, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # TODO: сейчас это заглушка, а попозже нужно сделать полноценную реализацию
@@ -551,20 +562,20 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.ASSETS_UPDATE, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.ASSETS_UPDATE, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
 
-    async def process_get_call_history(self, payload, seq, writer):
+    async def video_chat_history(self, payload, seq, writer):
         """Обработчик получения истории звонков"""
         # Валидируем данные пакета
         try:
             GetCallHistoryPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.VIDEO_CHAT_HISTORY, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.VIDEO_CHAT_HISTORY, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # TODO: сейчас это заглушка, а попозже нужно сделать полноценную реализацию
@@ -579,20 +590,20 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.VIDEO_CHAT_HISTORY, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.VIDEO_CHAT_HISTORY, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
 
-    async def process_send_message(self, payload, seq, writer, senderId, db_pool):
+    async def msg_send(self, payload, seq, writer, senderId, db_pool):
         """Функция отправки сообщения"""
         # Валидируем данные пакета
         try:
             SendMessagePayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.MSG_SEND, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.MSG_SEND, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # Извлекаем данные из пакета
@@ -629,7 +640,7 @@ class Processors:
 
                     # Если нет такого чата - выбрасываем ошибку
                     if not chat:
-                        await self._send_error(seq, self.proto.MSG_SEND, self.error_types.CHAT_NOT_FOUND, writer)
+                        await self._send_error(seq, self.opcodes.MSG_SEND, self.error_types.CHAT_NOT_FOUND, writer)
                         return
                     
                     # Список участников
@@ -637,7 +648,7 @@ class Processors:
 
                     # Проверяем, является ли отправитель участником чата
                     if int(senderId) not in participants:
-                        await self._send_error(seq, self.proto.MSG_SEND, self.error_types.CHAT_NOT_ACCESS, writer)
+                        await self._send_error(seq, self.opcodes.MSG_SEND, self.error_types.CHAT_NOT_ACCESS, writer)
                         return
 
         # Добавляем сообщение в историю
@@ -687,20 +698,20 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.MSG_SEND, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.MSG_SEND, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
 
-    async def process_get_folders(self, payload, seq, writer, senderPhone):
+    async def folders_get(self, payload, seq, writer, senderPhone):
         """Синхронизация папок с сервером"""
         # Валидируем данные пакета
         try:
             SyncFoldersPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.FOLDERS_GET, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.FOLDERS_GET, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # Ищем папки в бд
@@ -720,13 +731,13 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.FOLDERS_GET, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.FOLDERS_GET, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
 
-    async def process_get_sessions(self, payload, seq, writer, senderPhone, hashedToken):
+    async def sessions_info(self, payload, seq, writer, senderPhone, hashedToken):
         """Получение активных сессий на аккаунте"""
         # Готовый список сессий
         sessions = []
@@ -756,20 +767,20 @@ class Processors:
 
         # Создаем пакет
         response = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.SESSIONS_INFO, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.SESSIONS_INFO, payload=payload
         )
 
         # Отправляем
         await self._send(writer, response)
 
-    async def process_search_users(self, payload, seq, writer):
+    async def contact_info(self, payload, seq, writer):
         """Поиск пользователей по ID"""
         # Валидируем данные пакета
         try:
             SearchUsersPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.CONTACT_INFO, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.CONTACT_INFO, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # Итоговый список пользователей
@@ -818,20 +829,20 @@ class Processors:
 
         # Создаем пакет
         response = self.proto.pack_packet(
-            seq=seq, opcode=self.proto.CONTACT_INFO, payload=payload
+            seq=seq, opcode=self.opcodes.CONTACT_INFO, payload=payload
         )
 
         # Отправляем
         await self._send(writer, response)
 
-    async def process_search_chats(self, payload, seq, writer, senderId):
+    async def chat_info(self, payload, seq, writer, senderId):
         """Поиск чатов по ID"""
         # Валидируем данные пакета
         try:
             SearchChatsPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.CHAT_INFO, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.CHAT_INFO, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Итоговый список чатов
@@ -894,20 +905,20 @@ class Processors:
 
         # Собираем пакет
         response = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.CHAT_INFO, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.CHAT_INFO, payload=payload
         )
 
         # Отправляем
         await self._send(writer, response)
 
-    async def process_search_by_phone(self, payload, seq, writer, senderId):
+    async def contact_info_by_phone(self, payload, seq, writer, senderId):
         """Поиск по номеру телефона"""
         # Валидируем данные пакета
         try:
             SearchByPhonePayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.CONTACT_INFO_BY_PHONE, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.CONTACT_INFO_BY_PHONE, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # Ищем пользователя в бд
@@ -918,7 +929,7 @@ class Processors:
 
                 # Если пользователь не найден, отправляем ошибку
                 if not user:
-                    await self._send_error(seq, self.proto.CONTACT_INFO_BY_PHONE, self.error_types.USER_NOT_FOUND, writer)
+                    await self._send_error(seq, self.opcodes.CONTACT_INFO_BY_PHONE, self.error_types.USER_NOT_FOUND, writer)
                     return
                 
                 # ID чата
@@ -964,34 +975,34 @@ class Processors:
 
         # Создаем пакет
         response = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.CONTACT_INFO_BY_PHONE, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.CONTACT_INFO_BY_PHONE, payload=payload
         )
 
         # Отправляем
         await self._send(writer, response)
 
-    async def process_get_call_token(self, payload, seq, writer):
+    async def ok_token(self, payload, seq, writer):
         """Получение токена для звонка"""
         # Валидируем данные пакета
         try:
             GetCallTokenPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.OK_TOKEN, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.OK_TOKEN, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # TODO: когда-то взяться за звонки
 
-        await self._send_error(seq, self.proto.OK_TOKEN, self.error_types.NOT_IMPLEMENTED, writer)
+        await self._send_error(seq, self.opcodes.OK_TOKEN, self.error_types.NOT_IMPLEMENTED, writer)
 
-    async def process_typing(self, payload, seq, writer, senderId):
+    async def msg_typing(self, payload, seq, writer, senderId):
         """Обработчик события печатания"""
         # Валидируем данные пакета
         try:
             TypingPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.MSG_TYPING, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.MSG_TYPING, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем данные из пакета
@@ -1006,7 +1017,7 @@ class Processors:
 
         # Если чат не найден, отправляем ошибку
         if not chat:
-            await self._send_error(seq, self.proto.MSG_TYPING, self.error_types.CHAT_NOT_FOUND, writer)
+            await self._send_error(seq, self.opcodes.MSG_TYPING, self.error_types.CHAT_NOT_FOUND, writer)
             return
 
         # Участники чата
@@ -1014,7 +1025,7 @@ class Processors:
 
         # Проверяем, является ли отправитель участником чата
         if int(senderId) not in participants:
-            await self._send_error(seq, self.proto.MSG_TYPING, self.error_types.CHAT_NOT_ACCESS, writer)
+            await self._send_error(seq, self.opcodes.MSG_TYPING, self.error_types.CHAT_NOT_ACCESS, writer)
             return
 
         # Рассылаем событие участникам чата
@@ -1033,20 +1044,20 @@ class Processors:
 
         # Создаем пакет
         packet = self.proto.pack_packet(
-            seq=seq, opcode=self.proto.MSG_TYPING
+            seq=seq, opcode=self.opcodes.MSG_TYPING
         )
 
         # Отправляем пакет
         await self._send(writer, packet)
 
-    async def process_complain_reasons_get(self, payload, seq, writer):
+    async def complain_reasons_get(self, payload, seq, writer):
         """Обработчик получения причин жалоб"""
         # Валидируем данные пакета
         try:
             ComplainReasonsGetPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.COMPLAIN_REASONS_GET, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.COMPLAIN_REASONS_GET, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # Собираем данные пакета
@@ -1057,20 +1068,20 @@ class Processors:
 
         # Создаем пакет
         packet = self.proto.pack_packet(
-            seq=seq, opcode=self.proto.COMPLAIN_REASONS_GET, payload=payload
+            seq=seq, opcode=self.opcodes.COMPLAIN_REASONS_GET, payload=payload
         )
 
         # Отправляем пакет
         await self._send(writer, packet)
 
-    async def process_chat_history(self, payload, seq, writer, senderId):
+    async def chat_history(self, payload, seq, writer, senderId):
         """Обработчик получения истории чата"""
         # Валидируем данные пакета
         try:
             ChatHistoryPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.CHAT_HISTORY, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.CHAT_HISTORY, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем данные из пакета
@@ -1097,13 +1108,13 @@ class Processors:
 
                     # Выбрасываем ошибку, если чата нет
                     if not chat:
-                        await self._send_error(seq, self.proto.CHAT_HISTORY, self.error_types.CHAT_NOT_FOUND, writer)
+                        await self._send_error(seq, self.opcodes.CHAT_HISTORY, self.error_types.CHAT_NOT_FOUND, writer)
                         return
 
                     # Проверяем, является ли пользователь участником чата
                     participants = json.loads(chat.get("participants"))
                     if int(senderId) not in participants:
-                        await self._send_error(seq, self.proto.CHAT_HISTORY, self.error_types.CHAT_NOT_ACCESS, writer)
+                        await self._send_error(seq, self.opcodes.CHAT_HISTORY, self.error_types.CHAT_NOT_ACCESS, writer)
                         return
 
                 # Если запрошены сообщения
@@ -1155,18 +1166,18 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.CHAT_HISTORY, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.CHAT_HISTORY, payload=payload
         )
 
         # Отправялем
         await self._send(writer, packet)
         
-    async def process_update_profile(self, payload, seq, writer, userId, userPhone):
+    async def profile(self, payload, seq, writer, userId, userPhone):
         # Валидируем входные данные
         try:
             UpdateProfilePayloadModel.model_validate(payload)
         except Exception as e:
-            await self._send_error(seq, self.proto.PROFILE, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.PROFILE, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем поля из пакета (каждое может быть None)
@@ -1226,7 +1237,7 @@ class Processors:
 
         # Отправляем ответ на запрос (CMD_OK)
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.PROFILE, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.PROFILE, payload=payload
         )
         await self._send(writer, packet)
 

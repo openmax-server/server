@@ -1,10 +1,9 @@
 # Импортирование библиотек
 import ssl, logging, asyncio
 from common.config import ServerConfig
-from oneme_tcp.controller import OnemeMobileController
+from oneme.controller import OnemeMobileController
 from telegrambot.controller import TelegramBotController
-from tamtam_tcp.controller import TTMobileController
-from tamtam_ws.controller import TTWSController
+from tamtam.controller import TTMobileController
 # Конфиг сервера
 server_config = ServerConfig()
 
@@ -75,7 +74,6 @@ async def main():
     controllers = {
         "oneme_mobile": OnemeMobileController(),
         "tamtam_mobile": TTMobileController(),
-        "tamtam_ws": TTWSController(),
         "telegrambot": TelegramBotController()
     }
 

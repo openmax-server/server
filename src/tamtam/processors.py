@@ -6,20 +6,29 @@ import json
 import re
 from common.static import Static
 from common.tools import Tools
-from tamtam_tcp.proto import Proto
-from tamtam_tcp.models import *
+
+from common.proto_tcp import MobileProto
+from common.proto_web import WebProto
+from common.opcodes import Opcodes
+
+from tamtam.models import *
 
 
 class Processors:
-    def __init__(self, db_pool=None, clients=None, send_event=None):
+    def __init__(self, db_pool=None, clients=None, send_event=None, type="socket"):
         if clients is None:
             clients = {}  # Более правильная логика
         self.static = Static()
-        self.proto = Proto()
         self.tools = Tools()
+        self.opcodes = Opcodes()
         self.error_types = self.static.ErrorTypes()
         self.db_pool = db_pool
         self.logger = logging.getLogger(__name__)
+
+        if type == "socket":
+            self.proto = MobileProto()
+        elif type == "web":
+            self.proto = WebProto()
 
     async def _send(self, writer, packet):
         try:
@@ -42,13 +51,13 @@ class Processors:
 
         await self._send(writer, packet)
 
-    async def process_hello(self, payload, seq, writer):
+    async def session_init(self, payload, seq, writer):
         """Обработчик приветствия"""
         # Валидируем данные пакета
         try:
             HelloPayloadModel.model_validate(payload)
         except Exception as e:
-            await self._send_error(seq, self.proto.HELLO, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.SESSION_INIT, self.error_types.INVALID_PAYLOAD, writer)
             return None, None
 
         # Получаем данные из пакета
@@ -67,20 +76,20 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.HELLO, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.SESSION_INIT, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
         return device_type, device_name
 
-    async def process_request_code(self, payload, seq, writer):
+    async def auth_request(self, payload, seq, writer):
         """Обработчик запроса кода"""
         # Валидируем данные пакета
         try:
             RequestCodePayloadModel.model_validate(payload)
         except Exception as e:
-            await self._send_error(seq, self.proto.REQUEST_CODE, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.AUTH_REQUEST, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем телефон из пакета
@@ -120,21 +129,20 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.REQUEST_CODE, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.AUTH_REQUEST, payload=payload
         )
 
         # Отправляем
         await self._send(writer, packet)
-
         self.logger.debug(f"Код для {phone}: {code}")
 
-    async def process_verify_code(self, payload, seq, writer):
+    async def auth(self, payload, seq, writer):
         """Обработчик проверки кода"""
         # Валидируем данные пакета
         try:
             VerifyCodePayloadModel.model_validate(payload)
         except Exception as e:
-            await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.AUTH, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем данные из пакета
@@ -154,12 +162,12 @@ class Processors:
                 stored_token = await cursor.fetchone()
 
                 if not stored_token:
-                    await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.CODE_EXPIRED, writer)
+                    await self._send_error(seq, self.opcodes.AUTH, self.error_types.CODE_EXPIRED, writer)
                     return
 
                 # Проверяем код
                 if stored_token.get("code_hash") != hashed_code:
-                    await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.INVALID_CODE, writer)
+                    await self._send_error(seq, self.opcodes.AUTH, self.error_types.INVALID_CODE, writer)
                     return
 
                 # Ищем аккаунт
@@ -200,18 +208,18 @@ class Processors:
         }
 
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.VERIFY_CODE, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.AUTH, payload=payload
         )
 
         await self._send(writer, packet)
 
-    async def process_final_auth(self, payload, seq, writer, deviceType, deviceName):
+    async def auth_confirm(self, payload, seq, writer, deviceType, deviceName):
         """Обработчик финальной аутентификации"""
         # Валидируем данные пакета
         try:
             FinalAuthPayloadModel.model_validate(payload)
         except Exception as e:
-            await self._send_error(seq, self.proto.FINAL_AUTH, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.AUTH_CONFIRM, self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем данные из пакета
@@ -236,12 +244,12 @@ class Processors:
                 stored_token = await cursor.fetchone()
 
                 if stored_token is None:
-                    await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.INVALID_TOKEN, writer)
+                    await self._send_error(seq, self.opcodes.AUTH_CONFIRM, self.error_types.INVALID_TOKEN, writer)
                     return
 
                 # Если авторизация только началась - отдаем ошибку
                 if stored_token.get("state") == "started":
-                    await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.INVALID_TOKEN, writer)
+                    await self._send_error(seq, self.opcodes.AUTH_CONFIRM, self.error_types.INVALID_TOKEN, writer)
                     return
 
                 # Ищем аккаунт
@@ -284,20 +292,20 @@ class Processors:
 
         # Создаем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.FINAL_AUTH, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.AUTH_CONFIRM, payload=payload
         )
 
         # Отправялем
         await self._send(writer, packet)
 
-    async def process_login(self, payload, seq, writer):
+    async def login(self, payload, seq, writer):
         """Обработчик авторизации клиента на сервере"""
         # Валидируем данные пакета
         try:
             LoginPayloadModel.model_validate(payload)
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.proto.LOGIN, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.LOGIN, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # Получаем данные из пакета
@@ -314,7 +322,7 @@ class Processors:
 
                 # Если токен не найден, отправляем ошибку
                 if token_data is None:
-                    await self._send_error(seq, self.proto.VERIFY_CODE, self.error_types.INVALID_TOKEN, writer)
+                    await self._send_error(seq, self.opcodes.LOGIN, self.error_types.INVALID_TOKEN, writer)
                     return
 
                 # Ищем аккаунт пользователя в бд
@@ -384,7 +392,7 @@ class Processors:
 
         # Собираем пакет
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.LOGIN, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.LOGIN, payload=payload
         )
 
         # Отправляем

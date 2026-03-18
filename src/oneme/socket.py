@@ -1,8 +1,9 @@
 import asyncio, logging, traceback
-from oneme_tcp.proto import Proto
-from oneme_tcp.processors import Processors
+from common.proto_tcp import MobileProto
+from oneme.processors import Processors
 from common.rate_limiter import RateLimiter
 from common.tools import Tools
+from common.opcodes import Opcodes
 
 class OnemeMobileServer:
     def __init__(self, host="0.0.0.0", port=443, ssl_context=None, db_pool=None, clients={}, send_event=None, telegram_bot=None):
@@ -14,9 +15,10 @@ class OnemeMobileServer:
         self.db_pool = db_pool
         self.clients = clients
 
-        self.proto = Proto()
+        self.proto = MobileProto()
         self.auth_required = Tools().auth_required
         self.processors = Processors(db_pool=db_pool, clients=clients, send_event=send_event, telegram_bot=telegram_bot)
+        self.opcodes = Opcodes()
 
         # rate limiter anti ddos brute force protection
         self.auth_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
@@ -71,90 +73,90 @@ class OnemeMobileServer:
                 payload = packet.get("payload")
 
                 match opcode:
-                    case self.proto.SESSION_INIT:
-                        deviceType, deviceName = await self.processors.process_hello(payload, seq, writer)
-                    case self.proto.AUTH_REQUEST:
+                    case self.opcodes.SESSION_INIT:
+                        deviceType, deviceName = await self.processors.session_init(payload, seq, writer)
+                    case self.opcodes.AUTH_REQUEST:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
-                            await self.processors._send_error(seq, self.proto.AUTH_REQUEST, self.processors.error_types.RATE_LIMITED, writer)
+                            await self.processors._send_error(seq, self.opcodes.AUTH_REQUEST, self.processors.error_types.RATE_LIMITED, writer)
                         else:
-                            await self.processors.process_request_code(payload, seq, writer)
-                    case self.proto.AUTH:
+                            await self.processors.auth_request(payload, seq, writer)
+                    case self.opcodes.AUTH:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
-                            await self.processors._send_error(seq, self.proto.AUTH, self.processors.error_types.RATE_LIMITED, writer)
+                            await self.processors._send_error(seq, self.opcodes.AUTH, self.processors.error_types.RATE_LIMITED, writer)
                         else:
-                            await self.processors.process_verify_code(payload, seq, writer, deviceType, deviceName)
-                    case self.proto.AUTH_CONFIRM:
+                            await self.processors.auth(payload, seq, writer, deviceType, deviceName)
+                    case self.opcodes.AUTH_CONFIRM:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
-                            await self.processors._send_error(seq, self.proto.AUTH_CONFIRM, self.processors.error_types.RATE_LIMITED, writer)
+                            await self.processors._send_error(seq, self.opcodes.AUTH_CONFIRM, self.processors.error_types.RATE_LIMITED, writer)
                         elif payload and payload.get("tokenType") == "REGISTER":
-                            await self.processors.process_auth_confirm(payload, seq, writer, deviceType, deviceName)
+                            await self.processors.auth_confirm(payload, seq, writer, deviceType, deviceName)
                         else:
                             self.logger.warning(f"AUTH_CONFIRM с неизвестным tokenType: {payload}")
-                    case self.proto.LOGIN:
+                    case self.opcodes.LOGIN:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
-                            await self.processors._send_error(seq, self.proto.LOGIN, self.processors.error_types.RATE_LIMITED, writer)
+                            await self.processors._send_error(seq, self.opcodes.LOGIN, self.processors.error_types.RATE_LIMITED, writer)
                         else:
-                            userPhone, userId, hashedToken = await self.processors.process_login(payload, seq, writer)
+                            userPhone, userId, hashedToken = await self.processors.login(payload, seq, writer)
 
                             if userPhone:
                                 await self._finish_auth(writer, address, userPhone, userId)
-                    case self.proto.LOGOUT:
-                        await self.processors.process_logout(seq, writer, hashedToken=hashedToken)
+                    case self.opcodes.LOGOUT:
+                        await self.processors.logout(seq, writer, hashedToken=hashedToken)
                         break
-                    case self.proto.PING:
-                        await self.processors.process_ping(payload, seq, writer)
-                    case self.proto.LOG:
-                        await self.processors.process_telemetry(payload, seq, writer)
-                    case self.proto.ASSETS_UPDATE:
+                    case self.opcodes.PING:
+                        await self.processors.ping(payload, seq, writer)
+                    case self.opcodes.LOG:
+                        await self.processors.log(payload, seq, writer)
+                    case self.opcodes.ASSETS_UPDATE:
                         await self.auth_required(
-                            userPhone, self.processors.process_get_assets, payload, seq, writer
+                            userPhone, self.processors.assets_update, payload, seq, writer
                         )
-                    case self.proto.VIDEO_CHAT_HISTORY:
+                    case self.opcodes.VIDEO_CHAT_HISTORY:
                         await self.auth_required(
-                            userPhone, self.processors.process_get_call_history, payload, seq, writer
+                            userPhone, self.processors.video_chat_history, payload, seq, writer
                         )
-                    case self.proto.MSG_SEND:
+                    case self.opcodes.MSG_SEND:
                         await self.auth_required(
-                            userPhone, self.processors.process_send_message, payload, seq, writer, userId, self.db_pool
+                            userPhone, self.processors.msg_send, payload, seq, writer, userId, self.db_pool
                         )
-                    case self.proto.FOLDERS_GET:
+                    case self.opcodes.FOLDERS_GET:
                         await self.auth_required(
-                            userPhone, self.processors.process_get_folders, payload, seq, writer, userPhone
+                            userPhone, self.processors.folders_get, payload, seq, writer, userPhone
                         )
-                    case self.proto.SESSIONS_INFO:
+                    case self.opcodes.SESSIONS_INFO:
                         await self.auth_required(
-                            userPhone, self.processors.process_get_sessions, payload, seq, writer, userPhone, hashedToken
+                            userPhone, self.processors.sessions_info, payload, seq, writer, userPhone, hashedToken
                         )
-                    case self.proto.CHAT_INFO:
+                    case self.opcodes.CHAT_INFO:
                         await self.auth_required(
-                            userPhone, self.processors.process_search_chats, payload, seq, writer, userId
+                            userPhone, self.processors.chat_info, payload, seq, writer, userId
                         )
-                    case self.proto.CHAT_HISTORY:
+                    case self.opcodes.CHAT_HISTORY:
                         await self.auth_required(
-                            userPhone, self.processors.process_chat_history, payload, seq, writer, userId
+                            userPhone, self.processors.chat_history, payload, seq, writer, userId
                         )
-                    case self.proto.CONTACT_INFO_BY_PHONE:
+                    case self.opcodes.CONTACT_INFO_BY_PHONE:
                         await self.auth_required(
-                            userPhone, self.processors.process_search_by_phone, payload, seq, writer, userId
+                            userPhone, self.processors.contact_info_by_phone, payload, seq, writer, userId
                         )
-                    case self.proto.OK_TOKEN:
+                    case self.opcodes.OK_TOKEN:
                         await self.auth_required(
-                            userPhone, self.processors.process_get_call_token, payload, seq, writer
+                            userPhone, self.processors.ok_token, payload, seq, writer
                         )
-                    case self.proto.MSG_TYPING:
+                    case self.opcodes.MSG_TYPING:
                         await self.auth_required(
-                            userPhone, self.processors.process_typing, payload, seq, writer, userId
+                            userPhone, self.processors.msg_typing, payload, seq, writer, userId
                         )
-                    case self.proto.CONTACT_INFO:
+                    case self.opcodes.CONTACT_INFO:
                         await self.auth_required(
-                            userPhone, self.processors.process_search_users, payload, seq, writer
+                            userPhone, self.processors.contact_info, payload, seq, writer
                         )
-                    case self.proto.COMPLAIN_REASONS_GET:
+                    case self.opcodes.COMPLAIN_REASONS_GET:
                         await self.auth_required(
-                            userPhone, self.processors.process_complain_reasons_get, payload, seq, writer
+                            userPhone, self.processors.complain_reasons_get, payload, seq, writer
                         )
-                    case self.proto.PROFILE:
-                        await self.processors.process_update_profile(
+                    case self.opcodes.PROFILE:
+                        await self.processors.profile(
                             payload, seq, writer, userId=userId, userPhone=userPhone
                         )
                     case _:

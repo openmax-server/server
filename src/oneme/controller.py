@@ -1,13 +1,16 @@
 import asyncio
-from oneme_tcp.server import OnemeMobileServer
-from oneme_tcp.proto import Proto
+from oneme.socket import OnemeMobileServer
+from common.proto_tcp import MobileProto
+from common.proto_web import WebProto
 from classes.controllerbase import ControllerBase
 from common.config import ServerConfig
+from common.opcodes import Opcodes
 
 class OnemeMobileController(ControllerBase):
     def __init__(self):
         self.config = ServerConfig()
-        self.proto = Proto()
+        self.proto = MobileProto()
+        self.opcodes = Opcodes()
 
     async def event(self, target, client, eventData):
         # Извлекаем тип события и врайтер
@@ -34,7 +37,7 @@ class OnemeMobileController(ControllerBase):
 
             # Создаем пакет
             packet = self.proto.pack_packet(
-                cmd=0, seq=1, opcode=self.proto.NOTIF_MESSAGE, payload=payload
+                cmd=0, seq=1, opcode=self.opcodes.NOTIF_MESSAGE, payload=payload
             )
         elif eventType == "typing":
             # Данные события
@@ -51,7 +54,7 @@ class OnemeMobileController(ControllerBase):
 
             # Создаем пакет
             packet = self.proto.pack_packet(
-                cmd=0, seq=1, opcode=self.proto.NOTIF_TYPING, payload=payload
+                cmd=0, seq=1, opcode=self.opcodes.NOTIF_TYPING, payload=payload
             )
         elif eventType == "profile_updated":
             # Данные события
@@ -64,7 +67,7 @@ class OnemeMobileController(ControllerBase):
 
             # Создаем пакет
             packet = self.proto.pack_packet(
-                cmd=0, seq=1, opcode=self.proto.NOTIF_PROFILE, payload=payload
+                cmd=0, seq=1, opcode=self.opcodes.NOTIF_PROFILE, payload=payload
             )
 
         # Отправляем пакет
