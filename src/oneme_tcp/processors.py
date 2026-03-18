@@ -143,9 +143,9 @@ class Processors:
         # Получаем код через SMS шлюз или генерируем локально (безопасность прежде всего)
         if self.config.sms_gateway_url:
             code = await send_sms_code(self.config.sms_gateway_url, phone)
+
             if code is None:
-                await self._send_error(seq, self.proto.AUTH_REQUEST, self.error_types.INVALID_PAYLOAD, writer)
-                return
+                code = str(secrets.randbelow(900000) + 100000)
         else:
             code = str(secrets.randbelow(900000) + 100000)
 
