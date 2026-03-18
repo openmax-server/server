@@ -1121,14 +1121,22 @@ class Processors:
             username=user.get("username")
         )
 
+        # Данные пакета
+        payload = {
+            "profile": profile
+        }
+
         # Отправляем ответ на запрос (CMD_OK)
         packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.PROFILE, payload=profile
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.proto.PROFILE, payload=payload
         )
         await self._send(writer, packet)
 
-        # Отправляем уведомление об изменении профиля (CMD_NOF)
-        notif_packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_NOF, seq=0, opcode=self.proto.NOTIF_PROFILE, payload=profile
+        # Отправляем всем сессиям о изменении профиля
+        await self.event(
+            user.get('id'),
+            {
+                "eventType": "profile_updated",
+                "profile": profile
+            }     
         )
-        await self._send(writer, notif_packet)

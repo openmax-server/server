@@ -53,6 +53,19 @@ class OnemeMobileController(ControllerBase):
             packet = self.proto.pack_packet(
                 cmd=0, seq=1, opcode=self.proto.NOTIF_TYPING, payload=payload
             )
+        elif eventType == "profile_updated":
+            # Данные события
+            profile = eventData.get("profile")
+
+            # Данные пакета
+            payload = {
+                "profile": profile
+            }
+
+            # Создаем пакет
+            packet = self.proto.pack_packet(
+                cmd=0, seq=1, opcode=self.proto.NOTIF_PROFILE, payload=payload
+            )
 
         # Отправляем пакет
         writer.write(packet)
