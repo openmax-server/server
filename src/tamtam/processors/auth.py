@@ -1,102 +1,32 @@
 import hashlib
 import secrets
 import time
-import logging
 import json
 import re
-from common.static import Static
-from common.tools import Tools
+from classes.baseprocessor import BaseProcessor
+from tamtam.models import (
+    RequestCodePayloadModel,
+    VerifyCodePayloadModel,
+    FinalAuthPayloadModel,
+    LoginPayloadModel,
+)
 
-from common.proto_tcp import MobileProto
-from common.proto_web import WebProto
-from common.opcodes import Opcodes
-
-from tamtam.models import *
-
-
-class Processors:
-    def __init__(self, db_pool=None, clients=None, send_event=None, type="socket"):
-        if clients is None:
-            clients = {}  # Более правильная логика
-        self.static = Static()
-        self.tools = Tools()
-        self.opcodes = Opcodes()
-        self.error_types = self.static.ErrorTypes()
-        self.db_pool = db_pool
-        self.logger = logging.getLogger(__name__)
-
-        if type == "socket":
-            self.proto = MobileProto()
-        elif type == "web":
-            self.proto = WebProto()
-
-    async def _send(self, writer, packet):
-        try:
-            writer.write(packet)
-            await writer.drain()
-        except:
-            pass
-
-    async def _send_error(self, seq, opcode, type, writer):
-        payload = self.static.ERROR_TYPES.get(type, {
-            "localizedMessage": "Неизвестная ошибка",
-            "error": "unknown.error",
-            "message": "Unknown error",
-            "title": "Неизвестная ошибка"
-        })
-
-        packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_ERR, seq=seq, opcode=opcode, payload=payload
-        )
-
-        await self._send(writer, packet)
-
-    async def session_init(self, payload, seq, writer):
-        """Обработчик приветствия"""
-        # Валидируем данные пакета
-        try:
-            HelloPayloadModel.model_validate(payload)
-        except Exception as e:
-            await self._send_error(seq, self.opcodes.SESSION_INIT, self.error_types.INVALID_PAYLOAD, writer)
-            return None, None
-
-        # Получаем данные из пакета
-        device_type = payload.get("userAgent").get("deviceType")
-        device_name = payload.get("userAgent").get("deviceName")
-
-        # Данные пакета
-        payload = {
-            "proxy": "",
-            "logs-enabled": False,
-            "proxy-domains": [],
-            "location": "RU",
-            "libh-enabled": False,
-            "phone-auto-complete-enabled": False
-        }
-
-        # Собираем пакет
-        packet = self.proto.pack_packet(
-            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.SESSION_INIT, payload=payload
-        )
-
-        # Отправляем
-        await self._send(writer, packet)
-        return device_type, device_name
-
+class AuthProcessors(BaseProcessor):
     async def auth_request(self, payload, seq, writer):
         """Обработчик запроса кода"""
         # Валидируем данные пакета
         try:
             RequestCodePayloadModel.model_validate(payload)
         except Exception as e:
-            await self._send_error(seq, self.opcodes.AUTH_REQUEST, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.AUTH_REQUEST,
+                                   self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем телефон из пакета
-        phone = re.sub(r'\D', '', payload.get("phone", ""))  # Не хардкодим, через регулярки
+        phone = re.sub(r'\D', '', payload.get("phone", ""))
 
         # Генерируем токен с кодом
-        code = f"{secrets.randbelow(1_000_000):06d}"  # Старая версия ненадежна, могла отбросить ведущие нули или вообще интерпритировать как систему счисления с основанием 8
+        code = f"{secrets.randbelow(1_000_000):06d}"
         token = secrets.token_urlsafe(128)
 
         # Хешируем
@@ -114,8 +44,10 @@ class Processors:
 
                 # Если пользователь существует, сохраняем токен
                 if user:
-                    # Сохраняем токен
-                    await cursor.execute("INSERT INTO auth_tokens (phone, token_hash, code_hash, expires, state) VALUES (%s, %s, %s, %s, %s)", (phone, token_hash, code_hash, expires, "started",))
+                    await cursor.execute(
+                        "INSERT INTO auth_tokens (phone, token_hash, code_hash, expires, state) VALUES (%s, %s, %s, %s, %s)",
+                        (phone, token_hash, code_hash, expires, "started")
+                    )
 
         # Данные пакета
         payload = {
@@ -142,7 +74,8 @@ class Processors:
         try:
             VerifyCodePayloadModel.model_validate(payload)
         except Exception as e:
-            await self._send_error(seq, self.opcodes.AUTH, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.AUTH,
+                                   self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем данные из пакета
@@ -157,17 +90,21 @@ class Processors:
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 # Ищем токен
-                await cursor.execute("SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()",
-                                     (hashed_token,))
+                await cursor.execute(
+                    "SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()",
+                    (hashed_token,)
+                )
                 stored_token = await cursor.fetchone()
 
                 if not stored_token:
-                    await self._send_error(seq, self.opcodes.AUTH, self.error_types.CODE_EXPIRED, writer)
+                    await self._send_error(seq, self.opcodes.AUTH,
+                                           self.error_types.CODE_EXPIRED, writer)
                     return
 
                 # Проверяем код
                 if stored_token.get("code_hash") != hashed_code:
-                    await self._send_error(seq, self.opcodes.AUTH, self.error_types.INVALID_CODE, writer)
+                    await self._send_error(seq, self.opcodes.AUTH,
+                                           self.error_types.INVALID_CODE, writer)
                     return
 
                 # Ищем аккаунт
@@ -175,7 +112,10 @@ class Processors:
                 account = await cursor.fetchone()
 
                 # Обновляем состояние токена
-                await cursor.execute("UPDATE auth_tokens set state = %s WHERE token_hash = %s", ("verified", hashed_token,))
+                await cursor.execute(
+                    "UPDATE auth_tokens set state = %s WHERE token_hash = %s",
+                    ("verified", hashed_token)
+                )
 
         # Генерируем профиль
         # Аватарка с биографией
@@ -219,7 +159,8 @@ class Processors:
         try:
             FinalAuthPayloadModel.model_validate(payload)
         except Exception as e:
-            await self._send_error(seq, self.opcodes.AUTH_CONFIRM, self.error_types.INVALID_PAYLOAD, writer)
+            await self._send_error(seq, self.opcodes.AUTH_CONFIRM,
+                                   self.error_types.INVALID_PAYLOAD, writer)
             return
 
         # Извлекаем данные из пакета
@@ -239,17 +180,21 @@ class Processors:
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 # Ищем токен
-                await cursor.execute("SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()",
-                                     (hashed_token,))
+                await cursor.execute(
+                    "SELECT * FROM auth_tokens WHERE token_hash = %s AND expires > UNIX_TIMESTAMP()",
+                    (hashed_token,)
+                )
                 stored_token = await cursor.fetchone()
 
                 if stored_token is None:
-                    await self._send_error(seq, self.opcodes.AUTH_CONFIRM, self.error_types.INVALID_TOKEN, writer)
+                    await self._send_error(seq, self.opcodes.AUTH_CONFIRM,
+                                           self.error_types.INVALID_TOKEN, writer)
                     return
 
                 # Если авторизация только началась - отдаем ошибку
                 if stored_token.get("state") == "started":
-                    await self._send_error(seq, self.opcodes.AUTH_CONFIRM, self.error_types.INVALID_TOKEN, writer)
+                    await self._send_error(seq, self.opcodes.AUTH_CONFIRM,
+                                           self.error_types.INVALID_TOKEN, writer)
                     return
 
                 # Ищем аккаунт
@@ -262,18 +207,18 @@ class Processors:
                 # Создаем сессию
                 await cursor.execute(
                     "INSERT INTO tokens (phone, token_hash, device_type, device_name, location, time) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (stored_token.get("phone"), hashed_login, deviceType, deviceName, "Epstein Island",
-                     int(time.time()),)
+                    (stored_token.get("phone"), hashed_login, deviceType, deviceName,
+                     "Epstein Island", int(time.time()))
                 )
 
         # Аватарка с биографией
         photo_id = None if not account.get("avatar_id") else int(account.get("avatar_id"))
-        avatar_url = None if not photo_id else self.config.avatar_base_url + photo_id
+        avatar_url = None if not photo_id else self.config.avatar_base_url + str(photo_id)
         description = None if not account.get("description") else account.get("description")
 
         # Собираем данные пакета
         payload = {
-            "userToken": "0", # Пока как заглушка
+            "userToken": "0",  # Пока как заглушка
             "profile": self.tools.generate_profile_tt(
                 id=account.get("id"),
                 phone=int(account.get("phone")),
@@ -295,7 +240,7 @@ class Processors:
             cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.AUTH_CONFIRM, payload=payload
         )
 
-        # Отправялем
+        # Отправляем
         await self._send(writer, packet)
 
     async def login(self, payload, seq, writer):
@@ -303,11 +248,12 @@ class Processors:
         # Валидируем данные пакета
         try:
             LoginPayloadModel.model_validate(payload)
-        except pydantic.ValidationError as error:
-            self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
-            await self._send_error(seq, self.opcodes.LOGIN, self.error_types.INVALID_PAYLOAD, writer)
+        except Exception as e:
+            self.logger.error(f"Возникли ошибки при валидации пакета: {e}")
+            await self._send_error(seq, self.opcodes.LOGIN,
+                                   self.error_types.INVALID_PAYLOAD, writer)
             return
-        
+
         # Получаем данные из пакета
         token = payload.get("token")
 
@@ -322,7 +268,8 @@ class Processors:
 
                 # Если токен не найден, отправляем ошибку
                 if token_data is None:
-                    await self._send_error(seq, self.opcodes.LOGIN, self.error_types.INVALID_TOKEN, writer)
+                    await self._send_error(seq, self.opcodes.LOGIN,
+                                           self.error_types.INVALID_TOKEN, writer)
                     return
 
                 # Ищем аккаунт пользователя в бд
@@ -335,7 +282,7 @@ class Processors:
 
         # Аватарка с биографией
         photo_id = None if not user.get("avatar_id") else int(user.get("avatar_id"))
-        avatar_url = None if not photo_id else self.config.avatar_base_url + photo_id
+        avatar_url = None if not photo_id else self.config.avatar_base_url + str(photo_id)
         description = None if not user.get("description") else user.get("description")
 
         # Генерируем профиль
@@ -378,14 +325,14 @@ class Processors:
             "calls": [],
             "videoChatHistory": False,
             "drafts": {
-            "chats": {
-                "discarded": {},
-                "saved": {}
-            },
-            "users": {
-                "discarded": {},
-                "saved": {}
-            }
+                "chats": {
+                    "discarded": {},
+                    "saved": {}
+                },
+                "users": {
+                    "discarded": {},
+                    "saved": {}
+                }
             },
             "time": int(time.time() * 1000)
         }
