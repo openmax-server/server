@@ -6,10 +6,12 @@ from telebot.async_telebot import AsyncTeleBot
 from textwrap import dedent
 from common.static import Static
 from common.sql_queries import SQLQueries
+from common.tools import Tools
 
 class TelegramBot:
     def __init__(self, token, enabled, db_pool, whitelist_ids=None):
         self.bot = AsyncTeleBot(token)
+        self.tools = Tools()
         self.enabled = enabled
         self.db_pool = db_pool
         self.whitelist_ids = whitelist_ids if whitelist_ids is not None else []
@@ -72,6 +74,7 @@ class TelegramBot:
                         await cursor.execute(
                             self.sql_queries.INSERT_USER,
                             (
+                                self.tools.generate_user_id(),
                                 new_phone, # phone
                                 tg_id, # telegram_id
                                 message.from_user.first_name[:59], # firstname

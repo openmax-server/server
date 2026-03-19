@@ -1,5 +1,5 @@
 CREATE TABLE `users` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `id` INT PRIMARY KEY,
     `phone` VARCHAR(20) UNIQUE,
     `telegram_id` VARCHAR(64) UNIQUE,
     `firstname` VARCHAR(59) NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE `auth_tokens` (
 );
 
 CREATE TABLE `user_data` (
-    `phone` VARCHAR(20) NOT NULL UNIQUE,
+    `phone` VARCHAR(20) NOT NULL UNIQUE PRIMARY KEY,
     `chats` JSON NOT NULL,
     `contacts` JSON NOT NULL,
     `folders` JSON NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE `user_data` (
 );
 
 CREATE TABLE `chats` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `id` INT NOT NULL PRIMARY KEY,
     `owner` INT NOT NULL,
     `type` VARCHAR(16) NOT NULL,
     `participants` JSON NOT NULL

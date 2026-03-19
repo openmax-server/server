@@ -360,12 +360,12 @@ class Processors:
                 await cursor.execute(
                     """
                     INSERT INTO users
-                        (phone, telegram_id, firstname, lastname, username,
+                        (id, phone, telegram_id, firstname, lastname, username,
                         profileoptions, options, accountstatus, updatetime, lastseen)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        phone, None, first_name, last_name, None,
+                        self.tools.generate_user_id(), phone, None, first_name, last_name, None,
                         json.dumps([]), json.dumps(["ONEME"]),
                         0, str(now_ms), str(now_s),
                     )

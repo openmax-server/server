@@ -6,9 +6,9 @@ class SQLQueries:
 
     INSERT_USER = """
         INSERT INTO users 
-        (phone, telegram_id, firstname, lastname, username, 
+        (id, phone, telegram_id, firstname, lastname, username, 
          profileoptions, options, accountstatus, updatetime, lastseen) 
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     INSERT_USER_DATA = """

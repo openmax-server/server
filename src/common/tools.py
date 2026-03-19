@@ -1,4 +1,7 @@
-import json, time
+import json
+import time
+import random
+import hashlib
 
 class Tools:
     def __init__(self):
@@ -284,3 +287,17 @@ class Tools:
     async def auth_required(self, userPhone, coro, *args):
         if userPhone:
             await coro(*args)
+
+    def generate_user_id(self):
+        # Получаем время в юниксе
+        timestamp = int(time.time())
+
+        # Генерируем дополнительно рандомное число
+        random_number = random.randint(0, 9999)
+
+        # Собираем их вместе и вычисляем хеш
+        combined = f"{timestamp}{random_number}".encode()
+        unique_id = int(hashlib.md5(combined).hexdigest(), 16) % 1000000000
+
+        # Возвращаем
+        return unique_id
