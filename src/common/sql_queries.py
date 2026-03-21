@@ -13,6 +13,6 @@ class SQLQueries:
 
     INSERT_USER_DATA = """
         INSERT INTO user_data
-        (phone, chats, contacts, folders, user_config, chat_config)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        (phone, contacts, folders, user_config, chat_config)
+        VALUES (%s, %s, %s, %s, %s)
     """

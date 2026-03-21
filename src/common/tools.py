@@ -136,7 +136,7 @@ class Tools:
                         )
 
                         # Формируем список участников с временем последней активности
-                        participant_ids = json.loads(row.get("participants"))
+                        participant_ids = await self.get_chat_participants(chatId, db_pool)
                         participants = await self.get_participant_last_activity(
                             chatId, participant_ids, db_pool
                         )
@@ -171,6 +171,7 @@ class Tools:
 
         # Получаем ID предыдущего сообщения для избранного (чат ID = senderId)
         prevMessageId = await self.get_previous_message_id(senderId, db_pool)
+        
         # Хардкодим в лист чатов избранное
         chats.append(
             self.generate_chat(
@@ -195,17 +196,17 @@ class Tools:
 
                 row = await cursor.fetchone() or {}
                 last_message_id = row.get("id") or 0 # последнее id сообщения в чате
+                message_id = self.generate_id()
+                message_time = int(time.time() * 1000) # время отправки сообщения
 
                 # Вносим новое сообщение в таблицу
                 await cursor.execute(
-                    "INSERT INTO `messages` (chat_id, sender, time, text, attaches, cid, elements, type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                    (chatId, senderId, int(time.time() * 1000), text, json.dumps(attaches), cid, json.dumps(elements), type)
+                    "INSERT INTO `messages` (id, chat_id, sender, time, text, attaches, cid, elements, type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (message_id, chatId, senderId, message_time, text, json.dumps(attaches), cid, json.dumps(elements), type)
                 )
 
-                message_id = cursor.lastrowid # id сообщения
-
         # Возвращаем айдишки
-        return int(message_id), int(last_message_id)
+        return int(message_id), int(last_message_id), message_time
 
     async def get_last_message(self, chatId, db_pool):
         """Получение последнего сообщения в чате"""
@@ -284,11 +285,22 @@ class Tools:
 
                 return result
 
+    async def get_chat_participants(self, chatId, db_pool):
+        """Возвращает список ID участников чата из таблицы chat_participants."""
+        async with db_pool.acquire() as db_connection:
+            async with db_connection.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT user_id FROM chat_participants WHERE chat_id = %s",
+                    (chatId,)
+                )
+                rows = await cursor.fetchall()
+                return [row["user_id"] for row in rows]
+
     async def auth_required(self, userPhone, coro, *args):
         if userPhone:
             await coro(*args)
 
-    def generate_user_id(self):
+    def generate_id(self):
         # Получаем время в юниксе
         timestamp = int(time.time())
 

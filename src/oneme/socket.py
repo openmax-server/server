@@ -159,6 +159,10 @@ class OnemeMobileServer:
                         await self.processors.profile(
                             payload, seq, writer, userId=userId, userPhone=userPhone
                         )
+                    case self.opcodes.CHAT_SUBSCRIBE:
+                        await self.auth_required(
+                            userPhone, self.processors.chat_subscribe, payload, seq, writer
+                        )
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
         except Exception as e:

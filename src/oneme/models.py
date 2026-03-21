@@ -127,3 +127,7 @@ class AuthConfirmRegisterPayloadModel(pydantic.BaseModel):
 class ChatHistoryPayloadModel(pydantic.BaseModel):
     chatId: int
     backward: int
+
+class ChatSubscribePayloadModel(pydantic.BaseModel):
+    chatId: int
+    subscribe: bool

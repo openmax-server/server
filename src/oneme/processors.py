@@ -365,8 +365,8 @@ class Processors:
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        self.tools.generate_user_id(), phone, None, first_name, last_name, None,
-                        json.dumps([]), json.dumps(["ONEME"]),
+                        self.tools.generate_id(), phone, None, first_name, last_name, None,
+                        json.dumps([]), json.dumps(["TT", "ONEME"]),
                         0, str(now_ms), str(now_s),
                     )
                 )
@@ -377,12 +377,12 @@ class Processors:
                 await cursor.execute(
                     """
                     INSERT INTO user_data
-                        (phone, chats, contacts, folders, user_config, chat_config)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                        (phone, contacts, folders, user_config, chat_config)
+                    VALUES (%s %s, %s, %s, %s)
                     """,
                     (
                         phone,
-                        json.dumps([]), json.dumps([]),
+                        json.dumps([]),
                         json.dumps(self.static.USER_FOLDERS),
                         json.dumps(self.static.USER_SETTINGS),
                         json.dumps({}),
@@ -442,6 +442,9 @@ class Processors:
             await self._send_error(seq, self.opcodes.LOGIN, self.error_types.INVALID_PAYLOAD, writer)
             return
         
+        # Чаты, где состоит пользователь
+        chats = []
+
         # Получаем данные из пакета
         token = payload.get("token")
 
@@ -467,6 +470,18 @@ class Processors:
                 await cursor.execute("SELECT * FROM user_data WHERE phone = %s", (token_data.get("phone"),))
                 user_data = await cursor.fetchone()
 
+                # Ищем все чаты, где состоит пользователь
+                await cursor.execute(
+                    "SELECT * FROM chat_participants WHERE user_id = %s", 
+                    (user.get('id'))
+                )
+                user_chats = await cursor.fetchall()
+
+                for chat in user_chats:
+                    chats.append(
+                        chat.get("chat_id")
+                    )
+
         # Аватарка с биографией
         photoId = None if not user.get("avatar_id") else int(user.get("avatar_id"))
         avatar_url = None if not photoId else self.config.avatar_base_url + photoId
@@ -490,8 +505,7 @@ class Processors:
         )
 
         chats = await self.tools.generate_chats(
-            json.loads(user_data.get("chats")),
-            self.db_pool, user.get("id")
+            chats, self.db_pool, user.get("id")
         )
 
         # Формируем данные пакета
@@ -510,6 +524,10 @@ class Processors:
             "videoChatHistory": False,
             "time": int(time.time() * 1000)
         }
+
+        print(
+            json.dumps(payload, indent=4)
+        )
 
         # Собираем пакет
         packet = self.proto.pack_packet(
@@ -609,9 +627,6 @@ class Processors:
         cid = message.get("cid") or 0
         text = message.get("text") or ""
 
-        # Время отправки сообщения
-        messageTime = int(time.time() * 1000)
-
         # Вычисляем ID чата по ID пользователя и ID отправителя, 
         # в случае отсутствия ID чата
         if not chatId:
@@ -637,7 +652,7 @@ class Processors:
                         return
                     
                     # Список участников
-                    participants = json.loads(chat.get("participants"))
+                    participants = await self.tools.get_chat_participants(chatId, db_pool)
 
                     # Проверяем, является ли отправитель участником чата
                     if int(senderId) not in participants:
@@ -645,7 +660,7 @@ class Processors:
                         return
 
         # Добавляем сообщение в историю
-        messageId, lastMessageId = await self.tools.insert_message(
+        messageId, lastMessageId, messageTime = await self.tools.insert_message(
             chatId=chatId,
             senderId=senderId,
             text=text,
@@ -854,10 +869,10 @@ class Processors:
                         
                         if chat:
                             # Проверяем, является ли пользователь участником чата
-
+                            participants = await self.tools.get_chat_participants(chatId, self.db_pool)
                             # (в max нельзя смотреть и отправлять сообщения в чат, в котором ты не участник, в отличие от tg (например, комментарии в каналах),
                             # так что надо тоже так делать)
-                            if senderId not in json.loads(chat.get("participants")):
+                            if int(senderId) not in participants:
                                 continue
 
                             # Получаем последнее сообщение из чата
@@ -868,8 +883,8 @@ class Processors:
                             # Добавляем чат в список
                             chats.append(
                                 self.tools.generate_chat(
-                                    chatId, chat.get("owner"), 
-                                    chat.get("type"), json.loads(chat.get("participants")),
+                                    chatId, chat.get("owner"),
+                                    chat.get("type"), participants,
                                     message, messageTime
                                 )
                             )
@@ -935,9 +950,18 @@ class Processors:
                 # Если диалога нет - создаем
                 if not chat:
                     await cursor.execute(
-                        "INSERT INTO chats (id, owner, type, participants) VALUES (%s, %s, %s, %s)",
-                        (chatId, senderId, "DIALOG", json.dumps([int(senderId), int(user.get("id"))]))
+                        "INSERT INTO chats (id, owner, type) VALUES (%s, %s, %s)",
+                        (chatId, senderId, "DIALOG")
                     )
+
+                    # Добавляем участников в таблицу chat_participants
+                    participants = [int(senderId), int(user.get("id"))]
+                    
+                    for user_id in participants:
+                        await cursor.execute(
+                            "INSERT INTO chat_participants (chat_id, user_id) VALUES (%s, %s)",
+                            (chatId, user_id)
+                        )
 
         # Аватарка с биографией
         photoId = None if not user.get("avatar_id") else int(user.get("avatar_id"))
@@ -1014,7 +1038,7 @@ class Processors:
             return
 
         # Участники чата
-        participants = json.loads(chat.get("participants"))
+        participants = await self.tools.get_chat_participants(chatId, self.db_pool)
 
         # Проверяем, является ли отправитель участником чата
         if int(senderId) not in participants:
@@ -1105,7 +1129,7 @@ class Processors:
                         return
 
                     # Проверяем, является ли пользователь участником чата
-                    participants = json.loads(chat.get("participants"))
+                    participants = await self.tools.get_chat_participants(chatId, self.db_pool)
                     if int(senderId) not in participants:
                         await self._send_error(seq, self.opcodes.CHAT_HISTORY, self.error_types.CHAT_NOT_ACCESS, writer)
                         return
@@ -1242,3 +1266,19 @@ class Processors:
                 "profile": profile
             }     
         )
+
+    async def chat_subscribe(self, payload, seq, writer):
+        # Валидируем входные данные
+        try:
+            ChatSubscribePayloadModel.model_validate(payload)
+        except Exception as e:
+            await self._send_error(seq, self.opcodes.CHAT_SUBSCRIBE, self.error_types.INVALID_PAYLOAD, writer)
+            return
+
+        # Созадаем пакет
+        packet = self.proto.pack_packet(
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.CHAT_SUBSCRIBE, payload=None
+        )
+
+        # Отправялем
+        await self._send(writer, packet)
