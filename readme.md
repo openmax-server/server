@@ -22,5 +22,5 @@ https://t.me/openmax_alerts
 Клиент может быть практически любым, главное условие - чтобы он был совместим с официальным сервером (`api.oneme.ru` / `api.tamtam.chat`).
 
 # Дополнительная информация
-[Faq](faq/readme.md)
-[Открытые сервера](faq/servers.md)
+- [Faq](faq/readme.md)
+- [Открытые сервера](faq/servers.md)
