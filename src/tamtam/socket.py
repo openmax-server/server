@@ -128,7 +128,7 @@ class TTMobileServer:
                     "writer": writer,
                     "ip": addr[0],
                     "port": addr[1],
-                    "protocol": "oneme_mobile"
+                    "protocol": "tamtam_mobile"
                 }
             )
         else:
@@ -140,7 +140,7 @@ class TTMobileServer:
                         "writer": writer,
                         "ip": addr[0],
                         "port": addr[1],
-                        "protocol": "oneme_mobile"
+                        "protocol": "tamtam_mobile"
                     }
                 ]
             }
