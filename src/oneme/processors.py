@@ -525,10 +525,6 @@ class Processors:
             "time": int(time.time() * 1000)
         }
 
-        print(
-            json.dumps(payload, indent=4)
-        )
-
         # Собираем пакет
         packet = self.proto.pack_packet(
             cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.LOGIN, payload=payload
@@ -692,7 +688,8 @@ class Processors:
                     "chatId": 0 if chatId == senderId else chatId,
                     "message": bodyMessage,
                     "prevMessageId": lastMessageId,
-                    "time": messageTime
+                    "time": messageTime,
+                    "writer": writer
                 }
             )
 
@@ -1263,7 +1260,8 @@ class Processors:
             user.get('id'),
             {
                 "eventType": "profile_updated",
-                "profile": profile
+                "profile": profile,
+                "writer": writer
             }     
         )
 

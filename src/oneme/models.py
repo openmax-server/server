@@ -10,12 +10,12 @@ class UserAgentModel(pydantic.BaseModel):
     pushDeviceType: str
     arch: str = None
     locale: str
-    buildNumber: int
+    buildNumber: int = None
     deviceName: str
     deviceLocale: str
 
 class HelloPayloadModel(pydantic.BaseModel):
-    clientSessionId: int
+    clientSessionId: int = None
     mt_instanceid: str = None
     userAgent: UserAgentModel
     deviceId: str

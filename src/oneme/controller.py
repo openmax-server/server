@@ -71,8 +71,9 @@ class OnemeMobileController(ControllerBase):
             )
 
         # Отправляем пакет
-        writer.write(packet)
-        await writer.drain()
+        if writer != eventData.get("writer"):
+            writer.write(packet)
+            await writer.drain()
 
     def launch(self, api):
         async def _start_all():
