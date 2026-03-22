@@ -56,7 +56,7 @@ class SearchProcessors(BaseProcessor):
 
         # Создаем пакет
         response = self.proto.pack_packet(
-            seq=seq, opcode=self.opcodes.CONTACT_INFO, payload=payload
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.CONTACT_INFO, payload=payload
         )
 
         # Отправляем

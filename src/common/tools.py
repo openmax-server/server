@@ -108,15 +108,17 @@ class Tools:
                 "lastDelayedUpdateTime": 0,
                 "lastFireDelayedErrorTime": 0,
                 "created": 1,
+                "cid": id,
                 "prevMessageId": prevMessageId,
                 "joinTime": 1,
-                "modified": lastEventTime
+                "modified": lastEventTime,
+                
             }
 
         # Возвращаем
         return result
 
-    async def generate_chats(self, chatIds, db_pool, senderId):
+    async def generate_chats(self, chatIds, db_pool, senderId, include_favourites=True):
         """Генерирует чаты для отдачи клиенту"""
         # Готовый список с чатами
         chats = []
@@ -156,34 +158,35 @@ class Tools:
                             )
                         )
 
-        # Получаем последнее сообщение из избранного
-        message, messageTime = await self.get_last_message(
-            senderId, db_pool
-        )
-
-        # ID избранного
-        chatId = senderId ^ senderId
-
-        # Получаем последнюю активность участника (отправителя) в избранном
-        participants = await self.get_participant_last_activity(
-            senderId, [senderId], db_pool
-        )
-
-        # Получаем ID предыдущего сообщения для избранного (чат ID = senderId)
-        prevMessageId = await self.get_previous_message_id(senderId, db_pool)
-        
-        # Хардкодим в лист чатов избранное
-        chats.append(
-            self.generate_chat(
-                chatId,
-                senderId,
-                "DIALOG",
-                participants,
-                message,
-                messageTime,
-                prevMessageId
+        if include_favourites == True:
+            # Получаем последнее сообщение из избранного
+            message, messageTime = await self.get_last_message(
+                senderId, db_pool
             )
-        )
+
+            # ID избранного
+            chatId = senderId ^ senderId
+
+            # Получаем последнюю активность участника (отправителя) в избранном
+            participants = await self.get_participant_last_activity(
+                senderId, [senderId], db_pool
+            )
+
+            # Получаем ID предыдущего сообщения для избранного (чат ID = senderId)
+            prevMessageId = await self.get_previous_message_id(senderId, db_pool)
+            
+            # Хардкодим в лист чатов избранное
+            chats.append(
+                self.generate_chat(
+                    chatId,
+                    senderId,
+                    "DIALOG",
+                    participants,
+                    message,
+                    messageTime,
+                    prevMessageId
+                )
+            )
 
         return chats
 

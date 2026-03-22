@@ -10,8 +10,13 @@ from tamtam.models import (
     FinalAuthPayloadModel,
     LoginPayloadModel,
 )
+from tamtam.config import TTConfig
 
 class AuthProcessors(BaseProcessor):
+    def __init__(self, db_pool=None, clients=None, send_event=None, type="socket"):
+        super().__init__(db_pool, clients, send_event, type)
+        self.server_config = TTConfig().SERVER_CONFIG
+
     async def auth_request(self, payload, seq, writer):
         """Обработчик запроса кода"""
         # Валидируем данные пакета
@@ -254,6 +259,9 @@ class AuthProcessors(BaseProcessor):
                                    self.error_types.INVALID_PAYLOAD, writer)
             return
 
+        # Чаты, где состоит пользователь
+        chats = []
+
         # Получаем данные из пакета
         token = payload.get("token")
 
@@ -280,6 +288,18 @@ class AuthProcessors(BaseProcessor):
                 await cursor.execute("SELECT * FROM user_data WHERE phone = %s", (token_data.get("phone"),))
                 user_data = await cursor.fetchone()
 
+                # Ищем все чаты, где состоит пользователь
+                await cursor.execute(
+                    "SELECT * FROM chat_participants WHERE user_id = %s", 
+                    (user.get('id'))
+                )
+                user_chats = await cursor.fetchall()
+
+                for chat in user_chats:
+                    chats.append(
+                        chat.get("chat_id")
+                    )
+
         # Аватарка с биографией
         photo_id = None if not user.get("avatar_id") else int(user.get("avatar_id"))
         avatar_url = None if not photo_id else self.config.avatar_base_url + str(photo_id)
@@ -300,8 +320,8 @@ class AuthProcessors(BaseProcessor):
         )
 
         chats = await self.tools.generate_chats(
-            json.loads(user_data.get("chats")),
-            self.db_pool, user.get("id")
+            chats, self.db_pool, user.get("id"),
+            include_favourites=False
         )
 
         # Формируем данные пакета
@@ -313,8 +333,8 @@ class AuthProcessors(BaseProcessor):
             "contacts": [],
             "presence": {},
             "config": {
-                "hash": "0",
-                "server": {},
+                "hash": "e5903aa8-0000000000000000-80000106-0000000000000001-00000001-0000000000000000-00000000-2-00000001-0000019c9559d057",
+                "server": self.server_config,
                 "user": json.loads(user_data.get("user_config")),
                 "chatFolders": {
                     "FOLDERS": [],
