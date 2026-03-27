@@ -38,3 +38,7 @@ class SearchUsersPayloadModel(pydantic.BaseModel):
 
 class PingPayloadModel(pydantic.BaseModel):
     interactive: bool
+
+class ChatHistoryPayloadModel(pydantic.BaseModel):
+    chatId: int
+    backward: int

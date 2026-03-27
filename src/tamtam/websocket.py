@@ -95,6 +95,10 @@ class TTWebSocketServer:
                         await self.auth_required(
                             userPhone, self.processors.contact_info, payload, seq, websocket
                         )
+                    case self.opcodes.CHAT_HISTORY:
+                        await self.auth_required(
+                            userPhone, self.processors.chat_history, payload, seq, websocket, userId
+                        )
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
         except websockets.exceptions.ConnectionClosed:

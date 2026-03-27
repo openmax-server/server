@@ -1148,7 +1148,7 @@ class Processors:
                 if getMessages:
                     if backward > 0:
                         await cursor.execute(
-                            "SELECT * FROM messages WHERE chat_id = %s AND time < %s ORDER BY id DESC LIMIT %s",
+                            "SELECT * FROM messages WHERE chat_id = %s AND time < %s ORDER BY time ASC LIMIT %s",
                             (chatId, from_time, backward)
                         )
 
@@ -1168,7 +1168,7 @@ class Processors:
 
                     if forward > 0:
                         await cursor.execute(
-                            "SELECT * FROM messages WHERE chat_id = %s AND time > %s ORDER BY id ASC LIMIT %s",
+                            "SELECT * FROM messages WHERE chat_id = %s AND time > %s ORDER BY time ASC LIMIT %s",
                             (chatId, from_time, forward)
                         )
 
@@ -1185,6 +1185,9 @@ class Processors:
                                 "elements": json.loads(row.get("elements")),
                                 "reactionInfo": {}
                             })
+
+        # Сортируем сообщения по времени
+        messages.sort(key=lambda x: x["time"])
 
         # Формируем ответ
         payload = {
