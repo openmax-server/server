@@ -23,6 +23,7 @@ class Static:
         REGISTRATION_SUCCESS = "registration_success"
         ACCOUNT_ALREADY_EXISTS = "account_already_exists"
         ID_NOT_WHITELISTED = "id_not_whitelisted"
+        ID_BLACKLISTED = "id_blacklisted"
         INTERNAL_ERROR = "internal_error"
         INCOMING_CODE = "incoming_code"
 
@@ -103,6 +104,9 @@ class Static:
         """,
         "id_not_whitelisted": """
             ❌ Ваш ID не находится в белом списке.
+        """,
+        "id_blacklisted": """
+            ❌ Ваш ID заблокирован.
         """,
         "internal_error": """
             ❌ Ошибка при регистрации аккаунта.
