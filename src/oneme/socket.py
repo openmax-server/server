@@ -6,7 +6,7 @@ from common.tools import Tools
 from common.opcodes import Opcodes
 
 class OnemeMobileServer:
-    def __init__(self, host="0.0.0.0", port=443, ssl_context=None, db_pool=None, clients={}, send_event=None, telegram_bot=None):
+    def __init__(self, host, port, ssl_context, db_pool, clients, send_event, telegram_bot):
         self.host = host
         self.port = port
         self.ssl_context = ssl_context
@@ -157,7 +157,7 @@ class OnemeMobileServer:
                         )
                     case self.opcodes.PROFILE:
                         await self.processors.profile(
-                            payload, seq, writer, userId=userId, userPhone=userPhone
+                            payload, seq, writer, userId=userId
                         )
                     case self.opcodes.CHAT_SUBSCRIBE:
                         await self.auth_required(
