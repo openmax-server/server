@@ -1,4 +1,4 @@
-pyTelegramBotAPI
+aiogram
 aiomysql
 msgpack
 lz4
