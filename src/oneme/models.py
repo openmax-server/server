@@ -7,7 +7,7 @@ class UserAgentModel(pydantic.BaseModel):
     timezone: str
     release: int = None
     screen: str
-    pushDeviceType: str
+    pushDeviceType: str = None
     arch: str = None
     locale: str
     buildNumber: int = None

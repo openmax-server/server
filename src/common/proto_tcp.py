@@ -18,11 +18,11 @@ class MobileProto:
             return None
 
         # Распаковываем заголовок
-        ver = int.from_bytes(data[0:1], "big")
-        cmd = int.from_bytes(data[1:3], "big")
-        seq = int.from_bytes(data[3:4], "big")
-        opcode = int.from_bytes(data[4:6], "big")
-        packed_len = int.from_bytes(data[6:10], "big")
+        ver = int.from_bytes(data[0:1], "big", signed=False)
+        cmd = int.from_bytes(data[1:2], "big", signed=False)
+        seq = int.from_bytes(data[2:4], "big", signed=False)
+        opcode = int.from_bytes(data[4:6], "big", signed=False)
+        packed_len = int.from_bytes(data[6:10], "big", signed=False)
 
         # Флаг упаковки
         comp_flag = packed_len >> 24
@@ -74,8 +74,8 @@ class MobileProto:
     def pack_packet(self, ver: int = 10, cmd: int = 0x100, seq: int = 1, opcode: int = 6, payload: dict = None) -> bytes:
         # Запаковываем заголовок
         ver_b = ver.to_bytes(1, "big")
-        cmd_b = cmd.to_bytes(2, "big")
-        seq_b = seq.to_bytes(1, "big")
+        cmd_b = cmd.to_bytes(1, "big")
+        seq_b = seq.to_bytes(2, "big")
         opcode_b = opcode.to_bytes(2, "big")
 
         # Запаковываем данные пакета
@@ -91,7 +91,7 @@ class MobileProto:
         return ver_b + cmd_b + seq_b + opcode_b + payload_len_b + payload_bytes
     
     ### Констаты протокола
-    CMD_OK = 0x100
-    CMD_NOF = 0x200
-    CMD_ERR = 0x300
+    CMD_OK = 1 # 0x100
+    CMD_NOF = 2 # 0x200
+    CMD_ERR = 3 # 0x300
     PROTO_VER = 10
