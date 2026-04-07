@@ -76,48 +76,69 @@ class SearchProcessors(BaseProcessor):
         # Валидируем данные пакета
         try:
             SearchByPhonePayloadModel.model_validate(payload)
-        except pydantic.ValidationError as error:
-            self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
+        except Exception as e:
             await self._send_error(seq, self.opcodes.CONTACT_INFO_BY_PHONE, self.error_types.INVALID_PAYLOAD, writer)
             return
         
         # Ищем пользователя в бд
-        phone = payload.get("phone").replace("+", "").replace(" ", "").replace("-", "")
-
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute("SELECT * FROM users WHERE phone = %s", (phone,))
+                await cursor.execute("SELECT * FROM users WHERE phone = %s", (int(payload.get("phone")),))
                 user = await cursor.fetchone()
 
-                # Если пользователь найден
-                if user:
-                    # Аватарка с биографией
-                    photoId = None if not user.get("avatar_id") else int(user.get("avatar_id"))
-                    avatar_url = None if not photoId else self.config.avatar_base_url + photoId
-                    description = None if not user.get("description") else user.get("description")
+                # Если пользователь не найден, отправляем ошибку
+                if not user:
+                    await self._send_error(seq, self.opcodes.CONTACT_INFO_BY_PHONE, self.error_types.USER_NOT_FOUND, writer)
+                    return
+                
+                # ID чата
+                chatId = senderId ^ user.get("id")
 
-                    # Генерируем профиль
-                    profile = self.tools.generate_profile(
-                        id=user.get("id"),
-                        phone=int(user.get("phone")),
-                        avatarUrl=avatar_url,
-                        photoId=photoId,
-                        updateTime=int(user.get("updatetime")),
-                        firstName=user.get("firstname"),
-                        lastName=user.get("lastname"),
-                        options=json.loads(user.get("options")),
-                        description=description,
-                        accountStatus=int(user.get("accountstatus")),
-                        profileOptions=json.loads(user.get("profileoptions")),
-                        includeProfileOptions=False,
-                        username=user.get("username")
+                # Ищем диалог в бд
+                await cursor.execute("SELECT * FROM chats WHERE id = %s", (chatId,))
+                chat = await cursor.fetchone()
+
+                # Если диалога нет - создаем
+                if not chat:
+                    await cursor.execute(
+                        "INSERT INTO chats (id, owner, type) VALUES (%s, %s, %s)",
+                        (chatId, senderId, "DIALOG")
                     )
-                else:
-                    profile = None
+
+                    # Добавляем участников в таблицу chat_participants
+                    participants = [int(senderId), int(user.get("id"))]
+                    
+                    for user_id in participants:
+                        await cursor.execute(
+                            "INSERT INTO chat_participants (chat_id, user_id) VALUES (%s, %s)",
+                            (chatId, user_id)
+                        )
+
+        # Аватарка с биографией
+        photoId = None if not user.get("avatar_id") else int(user.get("avatar_id"))
+        avatar_url = None if not photoId else self.config.avatar_base_url + photoId
+        description = None if not user.get("description") else user.get("description")
+
+        # Генерируем профиль
+        profile = self.tools.generate_profile(
+            id=user.get("id"),
+            phone=int(user.get("phone")),
+            avatarUrl=avatar_url,
+            photoId=photoId,
+            updateTime=int(user.get("updatetime")),
+            firstName=user.get("firstname"),
+            lastName=user.get("lastname"),
+            options=json.loads(user.get("options")),
+            description=description,
+            accountStatus=int(user.get("accountstatus")),
+            profileOptions=json.loads(user.get("profileoptions")),
+            includeProfileOptions=False,
+            username=user.get("username")
+        )
 
         # Создаем данные пакета
         payload = {
-            "profile": profile
+            "contact": profile
         }
 
         # Создаем пакет
@@ -162,7 +183,7 @@ class SearchProcessors(BaseProcessor):
 
                             # Получаем последнее сообщение из чата
                             message, messageTime = await self.tools.get_last_message(
-                                chatId, self.db_pool
+                                chatId, self.db_pool, protocol_type=self.type
                             )
 
                             # Добавляем чат в список
@@ -176,7 +197,7 @@ class SearchProcessors(BaseProcessor):
                     else:
                         # Получаем последнее сообщение из чата
                         message, messageTime = await self.tools.get_last_message(
-                            senderId, self.db_pool
+                            senderId, self.db_pool, protocol_type=self.type
                         )
 
                         # ID избранного

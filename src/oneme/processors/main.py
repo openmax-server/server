@@ -32,6 +32,7 @@ class MainProcessors(BaseProcessor):
             "app-update-type": 0,  # 1 = принудительное обновление
             "reg-country-code": self.static.REG_COUNTRY_CODES,
             "phone-auto-complete-enabled": False,
+            "qr-auth-enabled": False,
             "lang": True
         }
 

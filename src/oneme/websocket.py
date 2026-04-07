@@ -1,18 +1,14 @@
-import asyncio
 import logging
 import traceback
-
-from common.opcodes import Opcodes
-from common.proto_tcp import MobileProto
-from common.rate_limiter import RateLimiter
-from common.tools import Tools
+import websockets
+from common.proto_web import WebProto
 from oneme.processors import Processors
+from common.rate_limiter import RateLimiter
+from common.opcodes import Opcodes
+from common.tools import Tools
 
-
-class OnemeMobile:
-    def __init__(
-        self, host, port, ssl_context, db_pool, clients, send_event, telegram_bot
-    ):
+class OnemeWS:
+    def __init__(self, host, port, clients, ssl_context, db_pool, send_event):
         self.host = host
         self.port = port
         self.ssl_context = ssl_context
@@ -21,26 +17,22 @@ class OnemeMobile:
         self.db_pool = db_pool
         self.clients = clients
 
-        self.proto = MobileProto()
-        self.auth_required = Tools().auth_required
-        self.processors = Processors(
-            db_pool=db_pool,
-            clients=clients,
-            send_event=send_event,
-            telegram_bot=telegram_bot,
-        )
         self.opcodes = Opcodes()
 
-        # rate limiter anti ddos brute force protection
+        self.proto = WebProto()
+        self.processors = Processors(db_pool=db_pool, clients=clients, send_event=send_event, type="web")
+        self.auth_required = Tools().auth_required
+
+        # rate limiter
         self.auth_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
 
-        self.read_timeout = 300  # Таймаут чтения из сокета (секунды)
-        self.max_read_size = 65536  # Максимальный размер данных из сокета
+        self.read_timeout = 300  # Таймаут чтения из websocket (секунды)
+        self.max_read_size = 65536  # Максимальный размер данных
 
-    async def handle_client(self, reader, writer):
-        """Функция для обработки подключений"""
+    async def handle_client(self, websocket):
+        """Функция для обработки WebSocket подключений"""
         # IP-адрес клиента
-        address = writer.get_extra_info("peername")
+        address = websocket.remote_address
         self.logger.info(f"Работаю с клиентом {address[0]}:{address[1]}")
 
         deviceType = None
@@ -51,36 +43,18 @@ class OnemeMobile:
         hashedToken = None
 
         try:
-            while True:
-                # Читаем новые данные из сокета с таймаутом
-                try:
-                    data = await asyncio.wait_for(
-                        reader.read(self.max_read_size), timeout=self.read_timeout
-                    )
-                except asyncio.TimeoutError:
-                    self.logger.info(
-                        f"Таймаут соединения для {address[0]}:{address[1]}"
-                    )
-                    break
-
-                # Если сокет закрыт - выходим из цикла
-                if not data:
-                    break
-
-                if len(data) > self.max_read_size:
-                    self.logger.warning(
-                        f"Пакет от {address[0]}:{address[1]} превышает лимит ({len(data)} байт)"
-                    )
+            async for message in websocket:
+                # Проверяем размер данных
+                if len(message) > self.max_read_size:
+                    self.logger.warning(f"Пакет от {address[0]}:{address[1]} превышает лимит ({len(message)} байт)")
                     break
 
                 # Распаковываем данные
-                packet = self.proto.unpack_packet(data)
+                packet = self.proto.unpack_packet(message)
 
-                # Скип если пакет невалидный
-                if packet is None:
-                    self.logger.warning(
-                        f"Невалидный пакет от {address[0]}:{address[1]}"
-                    )
+                # Если пакет невалидный — пропускаем
+                if not packet:
+                    self.logger.warning(f"Невалидный пакет от {address[0]}:{address[1]}")
                     continue
 
                 opcode = packet.get("opcode")
@@ -90,7 +64,7 @@ class OnemeMobile:
                 match opcode:
                     case self.opcodes.SESSION_INIT:
                         deviceType, deviceName = await self.processors.session_init(
-                            payload, seq, writer
+                            payload, seq, websocket
                         )
                     case self.opcodes.AUTH_REQUEST:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
@@ -98,21 +72,21 @@ class OnemeMobile:
                                 seq,
                                 self.opcodes.AUTH_REQUEST,
                                 self.processors.error_types.RATE_LIMITED,
-                                writer,
+                                websocket,
                             )
                         else:
-                            await self.processors.auth_request(payload, seq, writer)
+                            await self.processors.auth_request(payload, seq, websocket)
                     case self.opcodes.AUTH:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
                             await self.processors._send_error(
                                 seq,
                                 self.opcodes.AUTH,
                                 self.processors.error_types.RATE_LIMITED,
-                                writer,
+                                websocket,
                             )
                         else:
                             await self.processors.auth(
-                                payload, seq, writer, deviceType, deviceName
+                                payload, seq, websocket, deviceType, deviceName
                             )
                     case self.opcodes.AUTH_CONFIRM:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
@@ -120,11 +94,11 @@ class OnemeMobile:
                                 seq,
                                 self.opcodes.AUTH_CONFIRM,
                                 self.processors.error_types.RATE_LIMITED,
-                                writer,
+                                websocket,
                             )
                         elif payload and payload.get("tokenType") == "REGISTER":
                             await self.processors.auth_confirm(
-                                payload, seq, writer, deviceType, deviceName
+                                payload, seq, websocket, deviceType, deviceName
                             )
                         else:
                             self.logger.warning(
@@ -136,35 +110,35 @@ class OnemeMobile:
                                 seq,
                                 self.opcodes.LOGIN,
                                 self.processors.error_types.RATE_LIMITED,
-                                writer,
+                                websocket,
                             )
                         else:
                             (
                                 userPhone,
                                 userId,
                                 hashedToken,
-                            ) = await self.processors.login(payload, seq, writer)
+                            ) = await self.processors.login(payload, seq, websocket)
 
                             if userPhone:
                                 await self._finish_auth(
-                                    writer, address, userPhone, userId
+                                    websocket, address, userPhone, userId
                                 )
                     case self.opcodes.LOGOUT:
                         await self.processors.logout(
-                            seq, writer, hashedToken=hashedToken
+                            seq, websocket, hashedToken=hashedToken
                         )
                         break
                     case self.opcodes.PING:
-                        await self.processors.ping(payload, seq, writer)
+                        await self.processors.ping(payload, seq, websocket)
                     case self.opcodes.LOG:
-                        await self.processors.log(payload, seq, writer)
+                        await self.processors.log(payload, seq, websocket)
                     case self.opcodes.ASSETS_UPDATE:
                         await self.auth_required(
                             userPhone,
                             self.processors.assets_update,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                         )
                     case self.opcodes.VIDEO_CHAT_HISTORY:
                         await self.auth_required(
@@ -172,7 +146,7 @@ class OnemeMobile:
                             self.processors.video_chat_history,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                         )
                     case self.opcodes.MSG_SEND:
                         await self.auth_required(
@@ -180,7 +154,7 @@ class OnemeMobile:
                             self.processors.msg_send,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                             userId,
                             self.db_pool,
                         )
@@ -190,7 +164,7 @@ class OnemeMobile:
                             self.processors.folders_get,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                             userPhone,
                         )
                     case self.opcodes.SESSIONS_INFO:
@@ -199,7 +173,7 @@ class OnemeMobile:
                             self.processors.sessions_info,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                             userPhone,
                             hashedToken,
                         )
@@ -209,7 +183,7 @@ class OnemeMobile:
                             self.processors.chat_info,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                             userId,
                         )
                     case self.opcodes.CHAT_HISTORY:
@@ -218,7 +192,7 @@ class OnemeMobile:
                             self.processors.chat_history,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                             userId,
                         )
                     case self.opcodes.CONTACT_INFO_BY_PHONE:
@@ -227,12 +201,12 @@ class OnemeMobile:
                             self.processors.contact_info_by_phone,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                             userId,
                         )
                     case self.opcodes.OK_TOKEN:
                         await self.auth_required(
-                            userPhone, self.processors.ok_token, payload, seq, writer
+                            userPhone, self.processors.ok_token, payload, seq, websocket
                         )
                     case self.opcodes.MSG_TYPING:
                         await self.auth_required(
@@ -240,7 +214,7 @@ class OnemeMobile:
                             self.processors.msg_typing,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                             userId,
                         )
                     case self.opcodes.CONTACT_INFO:
@@ -249,7 +223,7 @@ class OnemeMobile:
                             self.processors.contact_info,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                         )
                     case self.opcodes.COMPLAIN_REASONS_GET:
                         await self.auth_required(
@@ -257,11 +231,11 @@ class OnemeMobile:
                             self.processors.complain_reasons_get,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                         )
                     case self.opcodes.PROFILE:
                         await self.processors.profile(
-                            payload, seq, writer, userId=userId
+                            payload, seq, websocket, userId=userId
                         )
                     case self.opcodes.CHAT_SUBSCRIBE:
                         await self.auth_required(
@@ -269,26 +243,23 @@ class OnemeMobile:
                             self.processors.chat_subscribe,
                             payload,
                             seq,
-                            writer,
+                            websocket,
                         )
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
+        except websockets.exceptions.ConnectionClosed:
+            self.logger.info(f"Прекратил работать с клиентом {address[0]}:{address[1]}")
         except Exception as e:
-            self.logger.error(
-                f"Произошла ошибка при работе с клиентом {address[0]}:{address[1]}: {e}"
-            )
+            self.logger.error(f" Произошла ошибка при работе с клиентом {address[0]}:{address[1]}: {e}")
             traceback.print_exc()
 
-        # Удаляем клиента из словаря
-        if userPhone:
+        # Удаляем клиента из словаря при отключении
+        if userId:
             await self._end_session(userId, address[0], address[1])
+        
+        self.logger.info(f"Прекратил работать с клиентом {address[0]}:{address[1]}")
 
-        writer.close()
-        self.logger.info(
-            f"Прекратил работать работать с клиентом {address[0]}:{address[1]}"
-        )
-
-    async def _finish_auth(self, writer, addr, phone, id):
+    async def _finish_auth(self, websocket, addr, phone, id):
         """Завершение открытия сессии"""
         # Ищем пользователя в словаре
         user = self.clients.get(id)
@@ -296,7 +267,12 @@ class OnemeMobile:
         # Добавляем новое подключение в словарь
         if user:
             user["clients"].append(
-                {"writer": writer, "ip": addr[0], "port": addr[1], "protocol": "oneme"}
+                {
+                    "writer": websocket,
+                    "ip": addr[0],
+                    "port": addr[1],
+                    "protocol": "oneme"
+                }
             )
         else:
             self.clients[id] = {
@@ -304,12 +280,12 @@ class OnemeMobile:
                 "id": id,
                 "clients": [
                     {
-                        "writer": writer,
+                        "writer": websocket,
                         "ip": addr[0],
                         "port": addr[1],
-                        "protocol": "oneme",
+                        "protocol": "oneme"
                     }
-                ],
+                ]
             }
 
     async def _end_session(self, id, ip, port):
@@ -328,12 +304,14 @@ class OnemeMobile:
                 clients.pop(i)
 
     async def start(self):
-        """Функция для запуска сервера"""
-        self.server = await asyncio.start_server(
-            self.handle_client, self.host, self.port, ssl=self.ssl_context
+        """Функция для запуска WebSocket сервера"""
+        self.server = await websockets.serve(
+            self.handle_client,
+            self.host,
+            self.port,
+            ssl=self.ssl_context
         )
 
-        self.logger.info(f"Сокет запущен на порту {self.port}")
+        self.logger.info(f"WebSocket запущен на порту {self.port}")
 
-        async with self.server:
-            await self.server.serve_forever()
+        await self.server.wait_closed()

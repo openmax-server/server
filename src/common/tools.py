@@ -1,18 +1,28 @@
-import json
-import time
-import random
 import hashlib
+import json
+import random
+import time
+
 
 class Tools:
     def __init__(self):
         pass
 
     def generate_profile(
-        self, id=1, phone=70000000000, avatarUrl=None,
-        photoId=None, updateTime=0,
-        firstName="Test", lastName="Account", options=[], 
-        description=None, accountStatus=0, profileOptions=[], 
-        includeProfileOptions=True, username=None
+        self,
+        id=1,
+        phone=70000000000,
+        avatarUrl=None,
+        photoId=None,
+        updateTime=0,
+        firstName="Test",
+        lastName="Account",
+        options=[],
+        description=None,
+        accountStatus=0,
+        profileOptions=[],
+        includeProfileOptions=True,
+        username=None,
     ):
         contact = {
             "id": id,
@@ -23,13 +33,12 @@ class Tools:
                     "name": firstName,
                     "firstName": firstName,
                     "lastName": lastName,
-                    "type": "ONEME"
+                    "type": "ONEME",
                 }
             ],
             "options": options,
-            "accountStatus": accountStatus
+            "accountStatus": accountStatus,
         }
-
 
         if avatarUrl:
             contact["photoId"] = photoId
@@ -42,31 +51,30 @@ class Tools:
         if username:
             contact["link"] = "https://max.ru/" + username
 
-        if includeProfileOptions == True:
-            return {
-                "contact": contact,
-                "profileOptions": profileOptions
-            }
+        if includeProfileOptions:
+            return {"contact": contact, "profileOptions": profileOptions}
         else:
             return contact
-        
+
     def generate_profile_tt(
-        self, id=1, phone=70000000000, avatarUrl=None,
-        photoId=None, updateTime=0,
-        firstName="Test", lastName="Account", options=[], 
-        description=None, username=None
+        self,
+        id=1,
+        phone=70000000000,
+        avatarUrl=None,
+        photoId=None,
+        updateTime=0,
+        firstName="Test",
+        lastName="Account",
+        options=[],
+        description=None,
+        username=None,
     ):
         contact = {
             "id": id,
             "updateTime": updateTime,
             "phone": phone,
-            "names": [
-                {
-                    "name": f"{firstName} {lastName}",
-                    "type": "TT"
-                }
-            ],
-            "options": options
+            "names": [{"name": f"{firstName} {lastName}", "type": "TT"}],
+            "options": options,
         }
 
         if avatarUrl:
@@ -81,17 +89,17 @@ class Tools:
             contact["link"] = "https://tamtam.chat/" + username
 
         return contact
-           
-    def generate_chat(self, id, owner, type, participants, lastMessage, lastEventTime, prevMessageId=0):
+
+    def generate_chat(
+        self, id, owner, type, participants, lastMessage, lastEventTime, prevMessageId=0
+    ):
         """Генерация чата"""
         # Генерируем список участников
         if isinstance(participants, dict):
             result_participants = {str(k): v for k, v in participants.items()}
         else:
             # assume list
-            result_participants = {
-                str(participant): 0 for participant in participants
-            }
+            result_participants = {str(participant): 0 for participant in participants}
 
         result = None
 
@@ -112,13 +120,12 @@ class Tools:
                 "prevMessageId": prevMessageId,
                 "joinTime": 1,
                 "modified": lastEventTime,
-                
             }
 
         # Возвращаем
         return result
 
-    async def generate_chats(self, chatIds, db_pool, senderId, include_favourites=True):
+    async def generate_chats(self, chatIds, db_pool, senderId, include_favourites=True, protocol_type='mobile'):
         """Генерирует чаты для отдачи клиенту"""
         # Готовый список с чатами
         chats = []
@@ -128,23 +135,31 @@ class Tools:
             async with db_pool.acquire() as db_connection:
                 async with db_connection.cursor() as cursor:
                     # Получаем чат по id
-                    await cursor.execute("SELECT * FROM `chats` WHERE id = %s", (chatId,))
+                    await cursor.execute(
+                        "SELECT * FROM `chats` WHERE id = %s", (chatId,)
+                    )
                     row = await cursor.fetchone()
 
                     if row:
                         # Получаем последнее сообщение из чата
                         message, messageTime = await self.get_last_message(
-                            chatId, db_pool
+                            chatId, db_pool, protocol_type=protocol_type
                         )
 
                         # Формируем список участников с временем последней активности
-                        participant_ids = await self.get_chat_participants(chatId, db_pool)
+                        participant_ids = await self.get_chat_participants(
+                            chatId, db_pool
+                        )
+
                         participants = await self.get_participant_last_activity(
                             chatId, participant_ids, db_pool
                         )
 
                         # Получаем ID предыдущего сообщения
-                        prevMessageId = await self.get_previous_message_id(chatId, db_pool)
+                        prevMessageId = await self.get_previous_message_id(
+                            chatId, db_pool, protocol_type=protocol_type
+                        )
+
                         # Выносим результат в лист
                         chats.append(
                             self.generate_chat(
@@ -154,14 +169,14 @@ class Tools:
                                 participants,
                                 message,
                                 messageTime,
-                                prevMessageId
+                                prevMessageId,
                             )
                         )
 
-        if include_favourites == True:
+        if include_favourites:
             # Получаем последнее сообщение из избранного
             message, messageTime = await self.get_last_message(
-                senderId, db_pool
+                senderId, db_pool, protocol_type=protocol_type
             )
 
             # ID избранного
@@ -173,60 +188,78 @@ class Tools:
             )
 
             # Получаем ID предыдущего сообщения для избранного (чат ID = senderId)
-            prevMessageId = await self.get_previous_message_id(senderId, db_pool)
-            
+            prevMessageId = await self.get_previous_message_id(senderId, db_pool, protocol_type=protocol_type)
+
             # Хардкодим в лист чатов избранное
             chats.append(
                 self.generate_chat(
-                    chatId,
+                    chatId if protocol_type == 'mobile' else str(chatId),
                     senderId,
                     "DIALOG",
                     participants,
                     message,
                     messageTime,
-                    prevMessageId
+                    prevMessageId,
                 )
             )
 
         return chats
 
-    async def insert_message(self, chatId, senderId, text, attaches, elements, cid, type, db_pool):
+    async def insert_message(
+        self, chatId, senderId, text, attaches, elements, cid, type, db_pool
+    ):
         """Добавление сообщения в историю"""
         async with db_pool.acquire() as db_connection:
             async with db_connection.cursor() as cursor:
                 # Получаем id последнего сообщения в чате
-                await cursor.execute("SELECT id FROM `messages` WHERE chat_id = %s ORDER BY time DESC LIMIT 1", (chatId,))
+                await cursor.execute(
+                    "SELECT id FROM `messages` WHERE chat_id = %s ORDER BY time DESC LIMIT 1",
+                    (chatId,),
+                )
 
                 row = await cursor.fetchone() or {}
-                last_message_id = row.get("id") or 0 # последнее id сообщения в чате
+                last_message_id = row.get("id") or 0  # последнее id сообщения в чате
                 message_id = self.generate_id()
-                message_time = int(time.time() * 1000) # время отправки сообщения
+                message_time = int(time.time() * 1000)  # время отправки сообщения
 
                 # Вносим новое сообщение в таблицу
                 await cursor.execute(
                     "INSERT INTO `messages` (id, chat_id, sender, time, text, attaches, cid, elements, type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                    (message_id, chatId, senderId, message_time, text, json.dumps(attaches), cid, json.dumps(elements), type)
+                    (
+                        message_id,
+                        chatId,
+                        senderId,
+                        message_time,
+                        text,
+                        json.dumps(attaches),
+                        cid,
+                        json.dumps(elements),
+                        type,
+                    ),
                 )
 
         # Возвращаем айдишки
         return int(message_id), int(last_message_id), message_time
 
-    async def get_last_message(self, chatId, db_pool):
+    async def get_last_message(self, chatId, db_pool, protocol_type='mobile'):
         """Получение последнего сообщения в чате"""
         async with db_pool.acquire() as db_connection:
             async with db_connection.cursor() as cursor:
                 # Получаем id последнего сообщения в чате
-                await cursor.execute("SELECT * FROM `messages` WHERE chat_id = %s ORDER BY time DESC LIMIT 1", (chatId,))
+                await cursor.execute(
+                    "SELECT * FROM `messages` WHERE chat_id = %s ORDER BY time DESC LIMIT 1",
+                    (chatId,),
+                )
 
                 row = await cursor.fetchone()
-                
+
                 # Если нет результатов - возвращаем None
                 if not row:
                     return None, None
 
                 # Собираем сообщение
                 message = {
-                    "id": row.get("id"),
+                    "id": row.get("id") if protocol_type == 'mobile' else str(row.get('id')),
                     "time": int(row.get("time")),
                     "type": row.get("type"),
                     "sender": row.get("sender"),
@@ -234,28 +267,28 @@ class Tools:
                     "text": row.get("text"),
                     "attaches": json.loads(row.get("attaches")),
                     "elements": json.loads(row.get("elements")),
-                    "reactionInfo": {}
+                    "reactionInfo": {},
                 }
 
                 # Возвращаем
                 return message, int(row.get("time"))
 
-    async def get_previous_message_id(self, chatId, db_pool):
+    async def get_previous_message_id(self, chatId, db_pool, protocol_type='mobile'):
         """Получение ID предыдущего сообщения (второго с конца) в чате."""
         async with db_pool.acquire() as db_connection:
             async with db_connection.cursor() as cursor:
                 await cursor.execute(
                     "SELECT id FROM `messages` WHERE chat_id = %s ORDER BY time DESC LIMIT 1 OFFSET 1",
-                    (chatId,)
+                    (chatId,),
                 )
                 row = await cursor.fetchone()
 
                 # Если результат есть, возвращаем его
                 if row:
-                    return int(row.get("id"))
-                
+                    return row.get("id") if protocol_type == 'mobile' else str(row.get('id')) 
+
                 # В ином случае возвращаем 0
-                return 0
+                return 0 if protocol_type == 'mobile' else "0"
 
     async def get_participant_last_activity(self, chatId, participant_ids, db_pool):
         """Возвращает словарь {participant_id: last_activity_time} для участников чата."""
@@ -265,7 +298,7 @@ class Tools:
         async with db_pool.acquire() as db_connection:
             async with db_connection.cursor() as cursor:
                 # Собираем всех участников
-                placeholders = ','.join(['%s'] * len(participant_ids))
+                placeholders = ",".join(["%s"] * len(participant_ids))
                 query = f"""
                     SELECT sender, MAX(time) as last_time
                     FROM messages
@@ -294,7 +327,7 @@ class Tools:
             async with db_connection.cursor() as cursor:
                 await cursor.execute(
                     "SELECT user_id FROM chat_participants WHERE chat_id = %s",
-                    (chatId,)
+                    (chatId,),
                 )
                 rows = await cursor.fetchall()
                 return [row["user_id"] for row in rows]

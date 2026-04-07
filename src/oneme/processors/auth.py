@@ -34,7 +34,7 @@ class AuthProcessors(BaseProcessor):
         phone = payload.get("phone").replace("+", "").replace(" ", "").replace("-", "")
 
         # Генерируем токен
-        token = secrets.token_urlsafe(128)
+        token = secrets.token_urlsafe(102)
         token_hash = hashlib.sha256(token.encode()).hexdigest()
 
         # Время истечения токена
@@ -282,7 +282,7 @@ class AuthProcessors(BaseProcessor):
                     """
                     INSERT INTO user_data
                         (phone, contacts, folders, user_config, chat_config)
-                    VALUES (%s %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s)
                     """,
                     (
                         phone,
@@ -409,7 +409,7 @@ class AuthProcessors(BaseProcessor):
         )
 
         chats = await self.tools.generate_chats(
-            chats, self.db_pool, user.get("id")
+            chats, self.db_pool, user.get("id"), protocol_type=self.type
         )
 
         # Формируем данные пакета

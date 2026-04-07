@@ -1,4 +1,8 @@
-import lz4.block, msgpack, logging, json
+import logging
+
+import lz4.block
+import msgpack
+
 
 class MobileProto:
     def __init__(self) -> None:
@@ -6,9 +10,9 @@ class MobileProto:
 
     # TODO узнать какие должны быть лимиты и поменять,
     # сейчас это больше заглушка
-    MAX_PAYLOAD_SIZE = 1048576 # 1 MB
-    MAX_DECOMPRESSED_SIZE = 1048576 # 1 MB
-    HEADER_SIZE = 10 # 1+2+1+2+4
+    MAX_PAYLOAD_SIZE = 1048576  # 1 MB
+    MAX_DECOMPRESSED_SIZE = 1048576  # 1 MB
+    HEADER_SIZE = 10  # 1+2+1+2+4
 
     ### Работа с протоколом
     def unpack_packet(self, data: bytes) -> dict | None:
@@ -32,12 +36,16 @@ class MobileProto:
 
         # Проверяем размер payload
         if payload_length > self.MAX_PAYLOAD_SIZE:
-            self.logger.warning(f"Payload слишком большой: {payload_length} B (лимит {self.MAX_PAYLOAD_SIZE})")
+            self.logger.warning(
+                f"Payload слишком большой: {payload_length} B (лимит {self.MAX_PAYLOAD_SIZE})"
+            )
             return None
 
         # Проверяем длину пакета
         if len(data) < self.HEADER_SIZE + payload_length:
-            self.logger.warning(f"Пакет неполный: требуется {self.HEADER_SIZE + payload_length} B, получено {len(data)}")
+            self.logger.warning(
+                f"Пакет неполный: требуется {self.HEADER_SIZE + payload_length} B, получено {len(data)}"
+            )
             return None
 
         payload_bytes = data[10 : 10 + payload_length]
@@ -60,7 +68,9 @@ class MobileProto:
             # Распаковываем msgpack
             payload = msgpack.unpackb(payload_bytes, raw=False, strict_map_key=False)
 
-        self.logger.debug(f"Распаковал - ver={ver} cmd={cmd} seq={seq} opcode={opcode} payload={payload}")
+        self.logger.debug(
+            f"Распаковал - ver={ver} cmd={cmd} seq={seq} opcode={opcode} payload={payload}"
+        )
 
         # Возвращаем
         return {
@@ -71,7 +81,14 @@ class MobileProto:
             "payload": payload,
         }
 
-    def pack_packet(self, ver: int = 10, cmd: int = 0x100, seq: int = 1, opcode: int = 6, payload: dict = None) -> bytes:
+    def pack_packet(
+        self,
+        ver: int = 11,
+        cmd: int = 0x100,
+        seq: int = 1,
+        opcode: int = 6,
+        payload: dict = {},
+    ) -> bytes:
         # Запаковываем заголовок
         ver_b = ver.to_bytes(1, "big")
         cmd_b = cmd.to_bytes(1, "big")
@@ -83,15 +100,17 @@ class MobileProto:
         if payload_bytes is None:
             payload_bytes = b""
         payload_len = len(payload_bytes) & 0xFFFFFF
-        payload_len_b = payload_len.to_bytes(4, 'big')
+        payload_len_b = payload_len.to_bytes(4, "big")
 
-        self.logger.debug(f"Упаковал - ver={ver} cmd={cmd} seq={seq} opcode={opcode} payload={payload}")
+        self.logger.debug(
+            f"Упаковал - ver={ver} cmd={cmd} seq={seq} opcode={opcode} payload={payload}"
+        )
 
         # Возвращаем пакет
         return ver_b + cmd_b + seq_b + opcode_b + payload_len_b + payload_bytes
-    
+
     ### Констаты протокола
-    CMD_OK = 1 # 0x100
-    CMD_NOF = 2 # 0x200
-    CMD_ERR = 3 # 0x300
-    PROTO_VER = 10
+    CMD_OK = 1  # 0x100
+    CMD_NOF = 2  # 0x200
+    CMD_ERR = 3  # 0x300
+    PROTO_VER = 11  # 10 для android клиента

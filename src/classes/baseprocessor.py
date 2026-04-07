@@ -18,8 +18,10 @@ class BaseProcessor:
 
         self.db_pool = db_pool
         self.clients = clients
-        self.send_event = send_event
+        self.event = send_event
         self.logger = logging.getLogger(__name__)
+
+        self.type = type
 
         if type == "socket":
             self.proto = MobileProto()

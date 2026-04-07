@@ -1,6 +1,6 @@
 import asyncio
-from tamtam.socket import TTMobileServer
-from tamtam.websocket import TTWebSocketServer
+from tamtam.socket import TamTamMobile
+from tamtam.websocket import TamTamWS
 from classes.controllerbase import ControllerBase
 from common.config import ServerConfig
 
@@ -11,7 +11,7 @@ class TTController(ControllerBase):
     def launch(self, api):
         async def _start_all():
             await asyncio.gather(
-                TTMobileServer(
+                TamTamMobile(
                     host=self.config.host,
                     port=self.config.tamtam_tcp_port,
                     ssl_context=api['ssl'],
@@ -19,7 +19,7 @@ class TTController(ControllerBase):
                     clients=api['clients'],
                     send_event=api['event']
                 ).start(),
-                TTWebSocketServer(
+                TamTamWS(
                     host=self.config.host,
                     port=self.config.tamtam_ws_port,
                     ssl_context=api['ssl'],

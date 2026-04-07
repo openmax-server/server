@@ -7,7 +7,7 @@ from common.rate_limiter import RateLimiter
 from common.opcodes import Opcodes
 from common.tools import Tools
 
-class TTMobileServer:
+class TamTamMobile:
     def __init__(self, host, port, ssl_context, db_pool, clients, send_event):
         self.host = host
         self.port = port

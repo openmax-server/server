@@ -58,8 +58,9 @@ class HistoryProcessors(BaseProcessor):
                         result = await cursor.fetchall()
 
                         for row in result:
+                            # TODO: Сборку тела сообщения нужно вынести в отдельную функцию
                             messages.append({
-                                "id": row.get("id"),
+                                "id": row.get("id") if self.type == 'mobile' else str(row.get('id')),
                                 "time": int(row.get("time")),
                                 "type": row.get("type"),
                                 "sender": row.get("sender"),

@@ -1,5 +1,6 @@
 import asyncio
-from oneme.socket import OnemeMobileServer
+from oneme.socket import OnemeMobile
+from oneme.websocket import OnemeWS
 from common.proto_tcp import MobileProto
 from common.proto_web import WebProto
 from classes.controllerbase import ControllerBase
@@ -78,7 +79,7 @@ class OnemeController(ControllerBase):
     def launch(self, api):
         async def _start_all():
             await asyncio.gather(
-                OnemeMobileServer(
+                OnemeMobile(
                     host=self.config.host,
                     port=self.config.oneme_tcp_port,
                     ssl_context=api['ssl'],
@@ -86,6 +87,14 @@ class OnemeController(ControllerBase):
                     clients=api['clients'],
                     send_event=api['event'],
                     telegram_bot=api.get('telegram_bot'),
+                ).start(),
+                OnemeWS(
+                    host=self.config.host,
+                    port=self.config.oneme_ws_port,
+                    clients=api['clients'],
+                    ssl_context=api['ssl'],
+                    db_pool=api['db'],
+                    send_event=api['event']
                 ).start()
             )
 

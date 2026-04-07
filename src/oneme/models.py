@@ -48,7 +48,7 @@ class LoginPayloadModel(pydantic.BaseModel):
     token: str
 
 class PingPayloadModel(pydantic.BaseModel):
-    interactive: bool
+    interactive: bool = None
 
 class AssetsPayloadModel(pydantic.BaseModel):
     sync: int
@@ -59,11 +59,11 @@ class GetCallHistoryPayloadModel(pydantic.BaseModel):
     count: int
 
 class MessageModel(pydantic.BaseModel):
-    isLive: bool
-    detectShare: bool
-    elements: list
+    isLive: bool = None
+    detectShare: bool = None
+    elements: list = None
     attaches: list = None
-    cid: int
+    cid: int = None
     text: str = None
 
 class SendMessagePayloadModel(pydantic.BaseModel):

@@ -83,7 +83,7 @@ class MessagesProcessors(BaseProcessor):
 
         # Вычисляем ID чата по ID пользователя и ID отправителя, 
         # в случае отсутствия ID чата
-        if not chatId:
+        if chatId is None:
             chatId = userId ^ senderId
 
         # Если клиент хочет отправить сообщение в избранное, 

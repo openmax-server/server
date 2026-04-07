@@ -7,7 +7,7 @@ from common.rate_limiter import RateLimiter
 from common.opcodes import Opcodes
 from common.tools import Tools
 
-class TTWebSocketServer:
+class TamTamWS:
     def __init__(self, host, port, clients, ssl_context, db_pool, send_event):
         self.host = host
         self.port = port
