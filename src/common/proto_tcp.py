@@ -69,7 +69,7 @@ class MobileProto:
             payload = msgpack.unpackb(payload_bytes, raw=False, strict_map_key=False)
 
         self.logger.debug(
-            f"Распаковал - ver={ver} cmd={cmd} seq={seq} opcode={opcode} payload={payload}"
+            f"Распаковал - ver={ver} cmd={cmd} seq={seq} opcode={opcode} payload={payload} comp_flag={comp_flag}"
         )
 
         # Возвращаем
@@ -83,8 +83,8 @@ class MobileProto:
 
     def pack_packet(
         self,
-        ver: int = 11,
-        cmd: int = 0x100,
+        ver: int = 10,
+        cmd: int = 1,
         seq: int = 1,
         opcode: int = 6,
         payload: dict = {},
@@ -99,18 +99,49 @@ class MobileProto:
         payload_bytes: bytes | None = msgpack.packb(payload)
         if payload_bytes is None:
             payload_bytes = b""
-        payload_len = len(payload_bytes) & 0xFFFFFF
-        payload_len_b = payload_len.to_bytes(4, "big")
+
+        # Флаг сжатия
+        comp_flag = 0
+
+        # Пробуем сжать данные пакета
+        try:
+            payload_comp = lz4.block.compress(
+                payload_bytes,
+                mode='high_compression',
+                store_size=False,
+            )
+
+            # Если сжатие нам выгодно, то используем его
+            if len(payload_bytes) > len(payload_comp):
+                final_payload = payload_comp
+
+                # Официальный сервер MAX отправлял мне в качестве
+                # флага сжатия 2, поэтому думаю стоит использовать ее
+                comp_flag = 2
+            else:
+                # В случае если сжатие нам не выгодно, используем
+                # только запакованные данные через msgpack
+                final_payload = payload_bytes
+        except Exception as e:
+            self.logger.warning(f"Ошибка сжатия LZ4: {e}")
+
+            # В случае ошибки сжатия используем 
+            # только запакованные данные через msgpack
+            final_payload = payload_bytes
+
+        payload_len = len(final_payload) & 0xFFFFFF
+        packed_len = (comp_flag << 24) | payload_len
+        payload_len_b = packed_len.to_bytes(4, "big")
 
         self.logger.debug(
-            f"Упаковал - ver={ver} cmd={cmd} seq={seq} opcode={opcode} payload={payload}"
+            f"Упаковал - ver={ver} cmd={cmd} seq={seq} opcode={opcode} payload={payload} comp_flag={comp_flag}"
         )
 
         # Возвращаем пакет
-        return ver_b + cmd_b + seq_b + opcode_b + payload_len_b + payload_bytes
+        return ver_b + cmd_b + seq_b + opcode_b + payload_len_b + final_payload
 
     ### Констаты протокола
-    CMD_OK = 1  # 0x100
-    CMD_NOF = 2  # 0x200
-    CMD_ERR = 3  # 0x300
-    PROTO_VER = 11  # 10 для android клиента
+    CMD_OK = 1
+    CMD_NOF = 2
+    CMD_ERR = 3
+    PROTO_VER = 10

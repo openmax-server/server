@@ -84,11 +84,11 @@ class AuthProcessors(BaseProcessor):
 
         # Данные пакета
         payload = {
+            "token": token,
+            "codeLength": 6,
             "requestMaxDuration": 60000,
             "requestCountLeft": 10,
-            "altActionDuration": 60000,
-            "codeLength": 6,
-            "token": token
+            "altActionDuration": 60000
         }
 
         # Собираем пакет
