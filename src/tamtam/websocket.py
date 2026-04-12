@@ -29,7 +29,7 @@ class TamTamWS:
         self.read_timeout = 300  # Таймаут чтения из websocket (секунды)
         self.max_read_size = 65536  # Максимальный размер данных
 
-    async def handle_client(self, websocket, path):
+    async def handle_client(self, websocket):
         """Функция для обработки WebSocket подключений"""
         # IP-адрес клиента
         address = websocket.remote_address
