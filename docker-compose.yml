@@ -1,39 +1,65 @@
 services:
-  app:
-    build: .
-    restart: unless-stopped
-    ports:
-      - "${oneme_tcp_port:-443}:443"
-      - "${tamtam_tcp_port:-4433}:4433"
-      - "${oneme_ws_port:-81}:81"
-      - "${tamtam_ws_port:-82}:82"
-    volumes:
-      - /etc/letsencrypt/live/${domain}/fullchain.pem:/certs/cert.pem:ro
-      - /etc/letsencrypt/live/${domain}/privkey.pem:/certs/key.pem:ro
-    env_file:
-      - .env
-    environment:
-      - db_host=db
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db:
-    image: mysql:8.0
+  mysql:
+    image: mysql:8.4
+    container_name: openmax-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${db_password:-openmax}
-      MYSQL_DATABASE: ${db_name:-openmax}
-      MYSQL_USER: ${db_user:-openmax}
-      MYSQL_PASSWORD: ${db_password:-openmax}
+      MYSQL_ROOT_PASSWORD: ${db_password}
+      MYSQL_DATABASE: ${db_name}
+      MYSQL_USER: ${db_user}
+      MYSQL_PASSWORD: ${db_password}
+      MYSQL_ROOT_HOST: "%"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./tables.sql:/docker-entrypoint-initdb.d/tables.sql:ro
+      - ./tables.sql:/docker-entrypoint-initdb.d/01-tables.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test:
+        - CMD-SHELL
+        - mysql -h127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} -e 'SELECT 1;'
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 20
+      start_period: 30s
+
+  openmax:
+    build:
+      context: .
+    image: openmax-server:latest
+    container_name: openmax-server
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      host: ${host}
+      oneme_tcp_port: ${oneme_tcp_port}
+      tamtam_tcp_port: ${tamtam_tcp_port}
+      oneme_ws_port: ${oneme_ws_port}
+      tamtam_ws_port: ${tamtam_ws_port}
+      log_level: ${log_level}
+      db_type: ${db_type}
+      db_host: ${db_host}
+      db_port: ${db_port}
+      db_user: ${db_user}
+      db_password: ${db_password}
+      db_name: ${db_name}
+      certfile: /app/certs/cert.pem
+      keyfile: /app/certs/key.pem
+      avatar_base_url: ${avatar_base_url}
+      telegram_bot_token: ${telegram_bot_token}
+      telegram_bot_enabled: ${telegram_bot_enabled}
+      telegram_whitelist_ids: ${telegram_whitelist_ids}
+    volumes:
+      - ${OPENMAX_CERTFILE_HOST}:/app/certs/cert.pem:ro
+      - ${OPENMAX_KEYFILE_HOST}:/app/certs/key.pem:ro
+    ports:
+      - "${oneme_tcp_port}:443"
+      - "${tamtam_tcp_port}:4433"
+      - "${oneme_ws_port}:81"
+      - "${tamtam_ws_port}:82"
 
 volumes:
   mysql_data:
