@@ -60,7 +60,7 @@ class TelegramBot:
         tg_id = str(message.from_user.id)
 
         # Проверка ID на наличие в белом списке
-        if tg_id not in self.whitelist_ids:
+        if self.whitelist_ids and tg_id not in self.whitelist_ids:
             await message.answer(
                 self.get_bot_message(self.msg_types.ID_NOT_WHITELISTED)
             )

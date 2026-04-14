@@ -1,10 +1,12 @@
 import logging
+
 from common.config import ServerConfig
-from common.static import Static
-from common.tools import Tools
+from common.opcodes import Opcodes
 from common.proto_tcp import MobileProto
 from common.proto_web import WebProto
-from common.opcodes import Opcodes
+from common.static import Static
+from common.tools import Tools
+
 
 class BaseProcessor:
     def __init__(self, db_pool=None, clients=None, send_event=None, type="socket"):
@@ -21,7 +23,7 @@ class BaseProcessor:
         self.event = send_event
         self.logger = logging.getLogger(__name__)
 
-        self.type = type
+        self.type = "mobile" if type == "socket" else type
 
         if type == "socket":
             self.proto = MobileProto()
@@ -31,21 +33,24 @@ class BaseProcessor:
     async def _send(self, writer, packet):
         try:
             # Если объектом является вебсокет, то используем функцию send для отправки
-            if hasattr(writer, 'send'):
+            if hasattr(writer, "send"):
                 await writer.send(packet)
-            else: # В ином случае отправляем как в обычный сокет
+            else:  # В ином случае отправляем как в обычный сокет
                 writer.write(packet)
                 await writer.drain()
         except Exception:
             pass
 
     async def _send_error(self, seq, opcode, error_type, writer):
-        payload = self.static.ERROR_TYPES.get(error_type, {
-            "localizedMessage": "Неизвестная ошибка",
-            "error": "unknown.error",
-            "message": "Unknown error",
-            "title": "Неизвестная ошибка"
-        })
+        payload = self.static.ERROR_TYPES.get(
+            error_type,
+            {
+                "localizedMessage": "Неизвестная ошибка",
+                "error": "unknown.error",
+                "message": "Unknown error",
+                "title": "Неизвестная ошибка",
+            },
+        )
 
         packet = self.proto.pack_packet(
             cmd=self.proto.CMD_ERR, seq=seq, opcode=opcode, payload=payload
