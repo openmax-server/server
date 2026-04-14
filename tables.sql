@@ -1,4 +1,4 @@
-CREATE TABLE `users` (
+CREATE TABLE IF NOT EXISTS `users` (
     `id` INT PRIMARY KEY,
     `phone` VARCHAR(20) UNIQUE,
     `telegram_id` VARCHAR(64) UNIQUE,
@@ -15,7 +15,7 @@ CREATE TABLE `users` (
     `username` VARCHAR(60) UNIQUE
 );
 
-CREATE TABLE `tokens` (
+CREATE TABLE IF NOT EXISTS `tokens` (
     `phone` VARCHAR(20) NOT NULL,
     `token_hash` VARCHAR(64) NOT NULL,
     `device_type` VARCHAR(256) NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE `tokens` (
     `time` VARCHAR(16) NOT NULL
 );
 
-CREATE TABLE `auth_tokens` (
+CREATE TABLE IF NOT EXISTS `auth_tokens` (
     `phone` VARCHAR(20) NOT NULL,
     `token_hash` VARCHAR(64) NOT NULL,
     `code_hash` VARCHAR(64) NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE `auth_tokens` (
     `state` VARCHAR(16)
 );
 
-CREATE TABLE `user_data` (
+CREATE TABLE IF NOT EXISTS `user_data` (
     `phone` VARCHAR(20) NOT NULL UNIQUE PRIMARY KEY,
     `contacts` JSON NOT NULL,
     `folders` JSON NOT NULL,
@@ -40,13 +40,13 @@ CREATE TABLE `user_data` (
     `chat_config` JSON NOT NULL
 );
 
-CREATE TABLE `chats` (
+CREATE TABLE IF NOT EXISTS `chats` (
     `id` INT NOT NULL PRIMARY KEY,
     `owner` INT NOT NULL,
     `type` VARCHAR(16) NOT NULL
 );
 
-CREATE TABLE `messages` (
+CREATE TABLE IF NOT EXISTS `messages` (
     `id` INT NOT NULL PRIMARY KEY,
     `chat_id` INT NOT NULL,
     `sender` INT NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE `messages` (
     `type` VARCHAR(16) NOT NULL
 );
 
-CREATE TABLE `chat_participants` (
+CREATE TABLE IF NOT EXISTS `chat_participants` (
     `chat_id` INT NOT NULL,
     `user_id` INT NOT NULL,
     `joined_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

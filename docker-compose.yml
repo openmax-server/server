@@ -41,7 +41,7 @@ services:
       tamtam_ws_port: ${tamtam_ws_port}
       log_level: ${log_level}
       db_type: ${db_type}
-      db_host: ${db_host}
+      db_host: mysql
       db_port: ${db_port}
       db_user: ${db_user}
       db_password: ${db_password}
@@ -53,8 +53,8 @@ services:
       telegram_bot_enabled: ${telegram_bot_enabled}
       telegram_whitelist_ids: ${telegram_whitelist_ids}
     volumes:
-      - ${OPENMAX_CERTFILE_HOST}:/app/certs/cert.pem:ro
-      - ${OPENMAX_KEYFILE_HOST}:/app/certs/key.pem:ro
+      - ${certfile}:/app/certs/cert.pem:ro
+      - ${keyfile}:/app/certs/key.pem:ro
     ports:
       - "${oneme_tcp_port}:443"
       - "${tamtam_tcp_port}:4433"

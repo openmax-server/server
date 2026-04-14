@@ -5,3 +5,4 @@ __pycache__
 *.crt
 tmp/**
 certs
+.DS_Store
