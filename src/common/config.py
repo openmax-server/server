@@ -51,4 +51,3 @@ class ServerConfig:
 
     ### sms шлюз
     sms_gateway_url = os.getenv("sms_gateway_url", "")
-}
