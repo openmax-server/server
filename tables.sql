@@ -1,5 +1,5 @@
 CREATE TABLE `users` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `id` INT PRIMARY KEY,
     `phone` VARCHAR(20) UNIQUE,
     `telegram_id` VARCHAR(64) UNIQUE,
     `firstname` VARCHAR(59) NOT NULL,
@@ -33,8 +33,7 @@ CREATE TABLE `auth_tokens` (
 );
 
 CREATE TABLE `user_data` (
-    `phone` VARCHAR(20) NOT NULL UNIQUE,
-    `chats` JSON NOT NULL,
+    `phone` VARCHAR(20) NOT NULL UNIQUE PRIMARY KEY,
     `contacts` JSON NOT NULL,
     `folders` JSON NOT NULL,
     `user_config` JSON NOT NULL,
@@ -42,14 +41,13 @@ CREATE TABLE `user_data` (
 );
 
 CREATE TABLE `chats` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `id` INT NOT NULL PRIMARY KEY,
     `owner` INT NOT NULL,
-    `type` VARCHAR(16) NOT NULL,
-    `participants` JSON NOT NULL
+    `type` VARCHAR(16) NOT NULL
 );
 
 CREATE TABLE `messages` (
-    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `id` INT NOT NULL PRIMARY KEY,
     `chat_id` INT NOT NULL,
     `sender` INT NOT NULL,
     `time` VARCHAR(32) NOT NULL,
@@ -58,4 +56,11 @@ CREATE TABLE `messages` (
     `cid` VARCHAR(32) NOT NULL,
     `elements` JSON NOT NULL,
     `type` VARCHAR(16) NOT NULL
+);
+
+CREATE TABLE `chat_participants` (
+    `chat_id` INT NOT NULL,
+    `user_id` INT NOT NULL,
+    `joined_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`chat_id`, `user_id`)
 );
