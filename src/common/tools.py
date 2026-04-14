@@ -96,10 +96,12 @@ class Tools:
         """Генерация чата"""
         # Генерируем список участников
         if isinstance(participants, dict):
-            result_participants = {str(k): v for k, v in participants.items()}
+            result_participants = {
+                int(k): int(v) if v is not None else 0 for k, v in participants.items()
+            }
         else:
             # assume list
-            result_participants = {str(participant): 0 for participant in participants}
+            result_participants = {int(participant): 0 for participant in participants}
 
         result = None
 
@@ -125,7 +127,14 @@ class Tools:
         # Возвращаем
         return result
 
-    async def generate_chats(self, chatIds, db_pool, senderId, include_favourites=True, protocol_type='mobile'):
+    async def generate_chats(
+        self,
+        chatIds,
+        db_pool,
+        senderId,
+        include_favourites=True,
+        protocol_type="mobile",
+    ):
         """Генерирует чаты для отдачи клиенту"""
         # Готовый список с чатами
         chats = []
@@ -188,12 +197,14 @@ class Tools:
             )
 
             # Получаем ID предыдущего сообщения для избранного (чат ID = senderId)
-            prevMessageId = await self.get_previous_message_id(senderId, db_pool, protocol_type=protocol_type)
+            prevMessageId = await self.get_previous_message_id(
+                senderId, db_pool, protocol_type=protocol_type
+            )
 
             # Хардкодим в лист чатов избранное
             chats.append(
                 self.generate_chat(
-                    chatId if protocol_type == 'mobile' else str(chatId),
+                    chatId if protocol_type == "mobile" else str(chatId),
                     senderId,
                     "DIALOG",
                     participants,
@@ -241,7 +252,7 @@ class Tools:
         # Возвращаем айдишки
         return int(message_id), int(last_message_id), message_time
 
-    async def get_last_message(self, chatId, db_pool, protocol_type='mobile'):
+    async def get_last_message(self, chatId, db_pool, protocol_type="mobile"):
         """Получение последнего сообщения в чате"""
         async with db_pool.acquire() as db_connection:
             async with db_connection.cursor() as cursor:
@@ -259,7 +270,9 @@ class Tools:
 
                 # Собираем сообщение
                 message = {
-                    "id": row.get("id") if protocol_type == 'mobile' else str(row.get('id')),
+                    "id": row.get("id")
+                    if protocol_type == "mobile"
+                    else str(row.get("id")),
                     "time": int(row.get("time")),
                     "type": row.get("type"),
                     "sender": row.get("sender"),
@@ -273,7 +286,7 @@ class Tools:
                 # Возвращаем
                 return message, int(row.get("time"))
 
-    async def get_previous_message_id(self, chatId, db_pool, protocol_type='mobile'):
+    async def get_previous_message_id(self, chatId, db_pool, protocol_type="mobile"):
         """Получение ID предыдущего сообщения (второго с конца) в чате."""
         async with db_pool.acquire() as db_connection:
             async with db_connection.cursor() as cursor:
@@ -285,10 +298,14 @@ class Tools:
 
                 # Если результат есть, возвращаем его
                 if row:
-                    return row.get("id") if protocol_type == 'mobile' else str(row.get('id')) 
+                    return (
+                        row.get("id")
+                        if protocol_type == "mobile"
+                        else str(row.get("id"))
+                    )
 
                 # В ином случае возвращаем 0
-                return 0 if protocol_type == 'mobile' else "0"
+                return 0 if protocol_type == "mobile" else "0"
 
     async def get_participant_last_activity(self, chatId, participant_ids, db_pool):
         """Возвращает словарь {participant_id: last_activity_time} для участников чата."""
@@ -310,11 +327,11 @@ class Tools:
                 rows = await cursor.fetchall()
 
                 # Собираем список участников без времени последней активности в чате
-                result = {str(pid): 0 for pid in participant_ids}
+                result = {int(pid): 0 for pid in participant_ids}
 
                 # Обновляем для каждого участника время последней активности в чате
                 for row in rows:
-                    sender = str(row["sender"])
+                    sender = int(row["sender"])
                     last_time = row["last_time"]
                     if last_time is not None:
                         result[sender] = int(last_time)
@@ -330,7 +347,7 @@ class Tools:
                     (chatId,),
                 )
                 rows = await cursor.fetchall()
-                return [row["user_id"] for row in rows]
+                return [int(row["user_id"]) for row in rows]
 
     async def auth_required(self, userPhone, coro, *args):
         if userPhone:
