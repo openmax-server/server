@@ -3,3 +3,6 @@ __pycache__
 *.pem
 *.sqlite
 *.crt
+tmp/**
+certs
+.DS_Store
