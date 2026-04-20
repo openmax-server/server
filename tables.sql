@@ -73,8 +73,8 @@ CREATE TABLE `chat_participants` (
 CREATE TABLE `contacts` (
     `owner_id` INT NOT NULL,
     `contact_id` INT NOT NULL,
-    `custom_firstname` VARCHAR(59),
-    `custom_lastname` VARCHAR(59),
+    `custom_firstname` VARCHAR(64),
+    `custom_lastname` VARCHAR(64),
     `is_blocked` BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (`owner_id`, `contact_id`)
 );

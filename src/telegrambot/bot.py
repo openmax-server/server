@@ -105,7 +105,6 @@ class TelegramBot:
                         self.sql_queries.INSERT_USER_DATA,
                         (
                             new_phone,  # phone
-                            json.dumps([]),  # contacts
                             json.dumps(self.static.USER_FOLDERS),  # folders
                             json.dumps(self.static.USER_SETTINGS),  # user settings
                             json.dumps({}),  # chat_config
