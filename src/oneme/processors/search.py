@@ -9,7 +9,7 @@ from oneme.models import (
 
 
 class SearchProcessors(BaseProcessor):
-    async def contact_info(self, payload, seq, writer):
+    async def contact_info(self, payload, seq, writer, senderId):
         """Поиск пользователей по ID"""
         # Валидируем данные пакета
         try:
@@ -39,6 +39,16 @@ class SearchProcessors(BaseProcessor):
                         avatar_url = None if not photoId else self.config.avatar_base_url + photoId
                         description = None if not user.get("description") else user.get("description")
 
+                        # Получаем данные контакта
+                        await cursor.execute(
+                            "SELECT * FROM contacts WHERE owner_id = %s AND contact_id = %s",
+                            (senderId, contactId),
+                        )
+                        contact_row = await cursor.fetchone()
+                        custom_firstname = contact_row.get("custom_firstname") if contact_row else None
+                        custom_lastname = contact_row.get("custom_lastname") if contact_row else None
+                        blocked = bool(contact_row.get("is_blocked")) if contact_row else False
+
                         # Генерируем профиль
                         users.append(
                             self.tools.generate_profile(
@@ -54,7 +64,10 @@ class SearchProcessors(BaseProcessor):
                                 accountStatus=int(user.get("accountstatus")),
                                 profileOptions=json.loads(user.get("profileoptions")),
                                 includeProfileOptions=False,
-                                username=user.get("username")
+                                username=user.get("username"),
+                                custom_firstname=custom_firstname,
+                                custom_lastname=custom_lastname,
+                                blocked=blocked,
                             )
                         )
 
@@ -119,6 +132,18 @@ class SearchProcessors(BaseProcessor):
         avatar_url = None if not photoId else self.config.avatar_base_url + photoId
         description = None if not user.get("description") else user.get("description")
 
+        # Получаем данные контакта
+        async with self.db_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT * FROM contacts WHERE owner_id = %s AND contact_id = %s",
+                    (senderId, user.get("id")),
+                )
+                contact_row = await cursor.fetchone()
+        custom_firstname = contact_row.get("custom_firstname") if contact_row else None
+        custom_lastname = contact_row.get("custom_lastname") if contact_row else None
+        blocked = bool(contact_row.get("is_blocked")) if contact_row else False
+
         # Генерируем профиль
         profile = self.tools.generate_profile(
             id=user.get("id"),
@@ -133,7 +158,10 @@ class SearchProcessors(BaseProcessor):
             accountStatus=int(user.get("accountstatus")),
             profileOptions=json.loads(user.get("profileoptions")),
             includeProfileOptions=False,
-            username=user.get("username")
+            username=user.get("username"),
+            custom_firstname=custom_firstname,
+            custom_lastname=custom_lastname,
+            blocked=blocked,
         )
 
         # Создаем данные пакета

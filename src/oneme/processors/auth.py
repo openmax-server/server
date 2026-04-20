@@ -30,6 +30,27 @@ class AuthProcessors(BaseProcessor):
         self.server_config = OnemeConfig().SERVER_CONFIG
         self.telegram_bot = telegram_bot
 
+    async def _send_banners(self, writer):
+        """Функция отправки баннеров клиенту"""
+        payload = {
+            "showTime": 86400000, # Сколько будет показываться баннер, тут сутки в миллисекундах
+                                  # можно в будущем переделать, и сделать выбор в конфигурации
+                                  # думаю, было бы прикольно
+            "updateTime": int(time.time() * 1000),
+            "banners": [
+                # TODO: разобраться как работают баннеры и их реализовать
+                # думаю админам инстансов было бы прикольно, и нам
+            ]
+        }
+
+        # Собираем пакет
+        packet = self.proto.pack_packet(
+            cmd=0, opcode=self.opcodes.NOTIF_BANNERS, payload=payload
+        )
+
+        # Отправляет
+        await self._send(writer, packet)
+
     async def auth_request(self, payload, seq, writer):
         """Обработчик запроса кода"""
         try:
@@ -356,12 +377,11 @@ class AuthProcessors(BaseProcessor):
                 await cursor.execute(
                     """
                     INSERT INTO user_data
-                        (phone, contacts, folders, user_config, chat_config)
-                    VALUES (%s, %s, %s, %s, %s)
+                        (phone, folders, user_config, chat_config)
+                    VALUES (%s, %s, %s, %s)
                     """,
                     (
                         phone,
-                        json.dumps([]),
                         json.dumps(self.static.USER_FOLDERS),
                         json.dumps(self.static.USER_SETTINGS),
                         json.dumps({}),
@@ -506,8 +526,14 @@ class AuthProcessors(BaseProcessor):
             username=user.get("username"),
         )
 
+        # Генерируем список чатов
         chats = await self.tools.generate_chats(
             chats, self.db_pool, user.get("id"), protocol_type=self.type
+        )
+
+        # Генерируем список контактов
+        contacts = await self.tools.collect_user_contacts(
+            user.get("id"), self.db_pool, self.config.avatar_base_url
         )
 
         # Формируем данные пакета
@@ -516,7 +542,7 @@ class AuthProcessors(BaseProcessor):
             "chats": chats,
             "chatMarker": 0,
             "messages": {},
-            "contacts": [],
+            "contacts": contacts,
             "presence": {},
             "config": {
                 "server": self.server_config,
@@ -532,8 +558,16 @@ class AuthProcessors(BaseProcessor):
             cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.LOGIN, payload=payload
         )
 
+        # print(
+        #     json.dumps(payload, indent=4)
+        # )
+
         # Отправляем
         await self._send(writer, packet)
+
+        # Отправляем баннеры
+        await self._send_banners(writer)
+
         return int(user.get("phone")), int(user.get("id")), hashed_token
 
     async def logout(self, seq, writer, hashedToken):

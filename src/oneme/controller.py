@@ -18,6 +18,10 @@ class OnemeController(ControllerBase):
         eventType = eventData.get("eventType")
         writer = client.get("writer")
 
+        # Не отправляем событие самому себе
+        if writer == eventData.get("writer"):
+            return
+
         # Обрабатываем событие
         if eventType == "new_msg":
             # Данные сообщения
@@ -72,9 +76,8 @@ class OnemeController(ControllerBase):
             )
 
         # Отправляем пакет
-        if writer != eventData.get("writer"):
-            writer.write(packet)
-            await writer.drain()
+        writer.write(packet)
+        await writer.drain()
 
     def launch(self, api):
         async def _start_all():

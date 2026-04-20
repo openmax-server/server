@@ -250,6 +250,7 @@ class OnemeMobile:
                             payload,
                             seq,
                             writer,
+                            userId,
                         )
                     case self.opcodes.COMPLAIN_REASONS_GET:
                         await self.auth_required(

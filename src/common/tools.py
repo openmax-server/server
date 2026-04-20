@@ -23,6 +23,12 @@ class Tools:
         profileOptions=[],
         includeProfileOptions=True,
         username=None,
+
+        # для контактов, собственно
+        custom_firstname=None,
+        custom_lastname=None,
+
+        blocked=False
     ):
         contact = {
             "id": id,
@@ -50,6 +56,19 @@ class Tools:
 
         if username:
             contact["link"] = "https://max.ru/" + username
+
+        if custom_firstname:
+            contact["names"].append(
+                {
+                    "name": custom_firstname,
+                    "firstName": custom_firstname,
+                    "lastName": custom_lastname,
+                    "type": "CUSTOM"
+                }
+            )
+
+        if blocked:
+            contact["status"] = "BLOCKED"
 
         if includeProfileOptions:
             return {"contact": contact, "profileOptions": profileOptions}
@@ -215,6 +234,124 @@ class Tools:
             )
 
         return chats
+
+    async def generate_contacts(
+        self,
+        contacts,
+        db_pool,
+        avatar_base_url="",
+    ):
+        """
+            Генерация контакт-листа для отдачи клиенту
+        
+            [notes]
+            В contacts должен поступать список вида
+
+            [
+                {
+                    "firstname": "test",
+                    "lastname": "testovich",
+                    "id": 4323
+                }
+            ]
+
+            А формировать мы должны его до вызова функции, 
+            ибо я хочу вынести контакты в отдельную таблицу,
+            по моему мнению так будет намного практичнее и лучше
+        """
+        # Готовый список с контакт-листом
+        contact_list = []
+
+        # Формируем список контактов
+        for contact in contacts:
+            # ID контакта
+            contact_id = contact.get("id")
+
+            # Имя и фамилия которые указал юзер для контакта
+            firstname = contact.get("firstname")
+            lastname = contact.get("lastname")
+            blocked = contact.get("blocked", False)
+
+            async with db_pool.acquire() as db_connection:
+                async with db_connection.cursor() as cursor:
+                    # Получаем контакт по id
+                    await cursor.execute(
+                        "SELECT * FROM `users` WHERE id = %s", (contact_id,)
+                    )
+                    user = await cursor.fetchone()
+
+                    if user:
+                        # Аватарка с биографией
+                        photoId = (
+                            None
+                            if not user.get("avatar_id")
+                            else int(user.get("avatar_id"))
+                        )
+                        avatar_url = (
+                            None
+                            if not photoId
+                            else avatar_base_url + str(photoId)
+                        )
+                        description = (
+                            None
+                            if not user.get("description")
+                            else user.get("description")
+                        )
+
+                        # Создаем профиль
+                        contact = self.generate_profile(
+                            id=user.get("id"),
+                            phone=int(user.get("phone")),
+                            avatarUrl=avatar_url,
+                            photoId=photoId,
+                            updateTime=int(user.get("updatetime")),
+                            firstName=user.get("firstname"),
+                            lastName=user.get("lastname"),
+                            options=json.loads(user.get("options")),
+                            description=description,
+                            accountStatus=int(user.get("accountstatus")),
+                            includeProfileOptions=False,
+                            username=user.get("username"),
+                            custom_firstname=firstname,
+                            custom_lastname=lastname,
+                            blocked=blocked,
+                        )
+
+                        # Выносим результат в лист
+                        contact_list.append(contact)
+
+        return contact_list
+
+    async def collect_user_contacts(
+        self,
+        owner_id,
+        db_pool,
+        avatar_base_url="",
+    ):
+        """Собирает все контакты пользователя и возвращает готовый контакт-лист"""
+        contacts = []
+
+        async with db_pool.acquire() as db_connection:
+            async with db_connection.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT * FROM `contacts` WHERE owner_id = %s",
+                    (owner_id,),
+                )
+                rows = await cursor.fetchall()
+
+                for row in rows:
+                    contacts.append(
+                        {
+                            "id": int(row.get("contact_id")),
+                            "firstname": row.get("custom_firstname"),
+                            "lastname": row.get("custom_lastname"),
+                            "blocked": bool(row.get("is_blocked")),
+                        }
+                    )
+
+        return await self.generate_contacts(
+            contacts, db_pool, avatar_base_url=avatar_base_url
+        )
 
     async def insert_message(
         self, chatId, senderId, text, attaches, elements, cid, type, db_pool

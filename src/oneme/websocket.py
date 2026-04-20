@@ -224,6 +224,7 @@ class OnemeWS:
                             payload,
                             seq,
                             websocket,
+                            userId,
                         )
                     case self.opcodes.COMPLAIN_REASONS_GET:
                         await self.auth_required(

@@ -49,7 +49,8 @@ class MessagesProcessors(BaseProcessor):
                         "eventType": "typing",
                         "chatId": chatId,
                         "type": type,
-                        "userId": senderId
+                        "userId": senderId,
+                        "writer": writer,
                     }
                 )
 
