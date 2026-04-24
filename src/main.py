@@ -4,6 +4,7 @@ import logging
 import ssl
 
 from common.config import ServerConfig
+from common.push import PushService
 from oneme.controller import OnemeController
 from tamtam.controller import TTController
 from telegrambot.controller import TelegramBotController
@@ -130,14 +131,33 @@ def set_logging():
 async def main():
     """Запуск сервера"""
 
-    async def api_event(target, eventData):
-        for client in api.get("clients", {}).get(target, {}).get("clients", {}):
-            await controllers[client["protocol"]].event(target, client, eventData)
-
     set_logging()
     db = await init_db()
     ssl_context = init_ssl()
     clients = {}
+    push_service = PushService(server_config.firebase_credentials_path)
+
+    async def api_event(target, eventData):
+        target_clients = api.get("clients", {}).get(target, {}).get("clients", [])
+
+        for client in target_clients:
+            await controllers[client["protocol"]].event(target, client, eventData)
+
+        # Если у пользователя нет активных подключений
+        # и это новое сообщение - отсылаем пуш
+        if not target_clients and eventData.get("eventType") == "new_msg":
+            message = eventData.get("message", {})
+            sender_id = message.get("sender")
+            text = message.get("text", "")
+            chat_id = eventData.get("chatId", "")
+            msg_id = message.get("id", 0)
+            await push_service.send_to_user(
+                db, target,
+                sender_id=sender_id,
+                msg_id=msg_id,
+                chat_id=chat_id,
+                text=text,
+            )
 
     api = {
         "db": db,

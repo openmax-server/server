@@ -130,7 +130,7 @@ class MainProcessors(BaseProcessor):
         # Отправляем
         await self._send(writer, response)
 
-    async def update_config(self, payload, seq, writer, userPhone):
+    async def update_config(self, payload, seq, writer, userPhone, hashedToken=None):
         """
             Обработчик 22 опкода (config)
             Он отвечает за обновление настроек приватности
@@ -140,9 +140,14 @@ class MainProcessors(BaseProcessor):
         # а отдавать его нужно только при изменении настроек приватности
         result_payload = None
 
-        if payload.get("pushToken") and payload.get("pushOptions"):
-            # TODO: Когда сядем за пуши, сделать тут обновление пуш токена
-            pass
+        if payload.get("pushToken"):
+            push_token = payload.get("pushToken")
+            async with self.db_pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        "UPDATE tokens SET push_token = %s WHERE phone = %s AND token_hash = %s",
+                        (push_token, str(userPhone), hashedToken)
+                    )
         elif payload.get("settings") and payload.get("settings").get("user"):
             """Обновление настроек приватности"""
             new_settings = payload.get("settings").get("user")

@@ -22,3 +22,26 @@
 2. Открываем консоль в той же директории и производим декомпиляцию: `apktool d <имя apk> -o max`
 3. Заходим в папку проекта и заменяем во всех классах "api.oneme.ru" на свой адрес сервера
 4. Производим повторную сборку с помощью команды: `apktool b max -o max_modified.apk`
+
+---
+
+# Патчинг Firebase для push-уведомлений
+
+> [!Important]
+> Без замены Firebase-конфига пуши от вашего сервера не будут работать.
+
+1. Создайте проект в [Firebase Console](https://console.firebase.google.com/) и добавьте Android-приложение с пакетом `ru.oneme.app`
+2. Скачайте `google-services.json`
+3. В декомпилированном APK откройте `res/values/strings.xml` и замените следующие строки на значения из вашего `google-services.json`:
+
+| Строка | Оригинал | Откуда взять |
+|---|---|---|
+| `google_api_key` | `AIzaSyABuDYeeDXIOrKTXLkUj30Ii143ofPe63Q` | `client[0].api_key[0].current_key` |
+| `google_app_id` | `1:659634599081:android:9605285443b661167225b8` | `client[0].client_info.mobilesdk_app_id` |
+| `gcm_defaultSenderId` | `659634599081` | `project_info.project_number` |
+| `project_id` | `max-messenger-app` | `project_info.project_id` |
+| `google_crash_reporting_api_key` | `AIzaSyABuDYeeDXIOrKTXLkUj30Ii143ofPe63Q` | `client[0].api_key[0].current_key` |
+| `google_storage_bucket` | `max-messenger-app.firebasestorage.app` | `project_info.storage_bucket` |
+
+4. Соберите и подпишите APK
+5. В настройках проекта Firebase создайте сервисный аккаунт и укажите путь в `.env`

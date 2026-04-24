@@ -23,6 +23,7 @@ CREATE TABLE `tokens` (
     `device_name` VARCHAR(256) NOT NULL,
     `location` VARCHAR(256) NOT NULL,
     `time` VARCHAR(16) NOT NULL,
+    `push_token` VARCHAR(512) DEFAULT NULL,
     PRIMARY KEY (`phone`, `token_hash`)
 );
 

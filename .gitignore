@@ -3,3 +3,4 @@ __pycache__
 *.pem
 *.sqlite
 *.crt
+*-adminsdk-*.json

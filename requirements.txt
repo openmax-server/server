@@ -8,3 +8,4 @@ aiosqlite
 aiohttp
 python-dotenv
 cryptography
+firebase-admin

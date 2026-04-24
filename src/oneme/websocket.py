@@ -254,6 +254,7 @@ class OnemeWS:
                             seq,
                             websocket,
                             userPhone,
+                            hashedToken,
                         )
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")

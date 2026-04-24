@@ -51,3 +51,6 @@ class ServerConfig:
 
     ### sms шлюз
     sms_gateway_url = os.getenv("sms_gateway_url", "")
+
+    ### Firebase
+    firebase_credentials_path = os.getenv("firebase_credentials_path", "")

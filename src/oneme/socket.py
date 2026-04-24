@@ -280,6 +280,7 @@ class OnemeMobile:
                             seq,
                             writer,
                             userPhone,
+                            hashedToken,
                         )
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
