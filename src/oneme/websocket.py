@@ -227,6 +227,15 @@ class OnemeWS:
                             websocket,
                             userId,
                         )
+                    case self.opcodes.CONTACT_LIST:
+                        await self.auth_required(
+                            userPhone,
+                            self.processors.contact_list,
+                            payload,
+                            seq,
+                            websocket,
+                            userId,
+                        )
                     case self.opcodes.COMPLAIN_REASONS_GET:
                         await self.auth_required(
                             userPhone,

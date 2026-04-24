@@ -131,3 +131,7 @@ class ChatHistoryPayloadModel(pydantic.BaseModel):
 class ChatSubscribePayloadModel(pydantic.BaseModel):
     chatId: int
     subscribe: bool
+
+class ContactListPayloadModel(pydantic.BaseModel):
+    status: str
+    count: int = None
