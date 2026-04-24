@@ -18,16 +18,31 @@ class FoldersProcessors(BaseProcessor):
         # Ищем папки в бд
         async with self.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute("SELECT folders FROM user_data WHERE phone = %s", (int(senderPhone),))
-                result_folders = await cursor.fetchone()
-                user_folders = json.loads(result_folders.get("folders"))
+                await cursor.execute(
+                    "SELECT id, title, filters, options, update_time, source_id "
+                    "FROM user_folders WHERE phone = %s ORDER BY sort_order",
+                    (int(senderPhone),)
+                )
+                result_folders = await cursor.fetchall()
+
+        folders = [
+            {
+                "id": folder["id"],
+                "title": folder["title"],
+                "filters": json.loads(folder["filters"]),
+                "updateTime": folder["update_time"],
+                "options": json.loads(folder["options"]),
+                "sourceId": folder["source_id"],
+            }
+            for folder in result_folders
+        ]
 
         # Создаем данные пакета
         payload = {
             "folderSync": int(time.time() * 1000),
-            "folders": self.static.ALL_CHAT_FOLDER + user_folders.get("folders"),
-            "foldersOrder": self.static.ALL_CHAT_FOLDER_ORDER + user_folders.get("foldersOrder"),
-            "allFilterExcludeFolders": user_folders.get("allFilterExcludeFolders")
+            "folders": folders,
+            "foldersOrder": [folder["id"] for folder in result_folders],
+            "allFilterExcludeFolders": []
         }
 
         # Собираем пакет

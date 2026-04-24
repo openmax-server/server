@@ -403,15 +403,24 @@ class AuthProcessors(BaseProcessor):
                 await cursor.execute(
                     """
                     INSERT INTO user_data
-                        (phone, folders, user_config, chat_config)
-                    VALUES (%s, %s, %s, %s)
+                        (phone, user_config, chat_config)
+                    VALUES (%s, %s, %s)
                     """,
                     (
                         phone,
-                        json.dumps(self.static.USER_FOLDERS),
                         json.dumps(self.static.USER_SETTINGS),
                         json.dumps({}),
                     ),
+                )
+
+                # Добавляем дефолтную папку
+                await cursor.execute(
+                    """
+                    INSERT INTO user_folders 
+                        (id, phone, title, sort_order)
+                    VALUES ('all.chat.folder', %s, 'Все', 0)
+                    """,
+                    (phone,),
                 )
 
                 # Удаляем токен

@@ -38,7 +38,6 @@ CREATE TABLE `auth_tokens` (
 
 CREATE TABLE `user_data` (
     `phone` VARCHAR(20) NOT NULL UNIQUE,
-    `folders` JSON NOT NULL,
     `user_config` JSON NOT NULL,
     `chat_config` JSON NOT NULL,
     PRIMARY KEY (`phone`)
@@ -96,4 +95,16 @@ CREATE TABLE `banners` (
     `enabled` BOOLEAN NOT NULL DEFAULT TRUE,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
+);
+
+CREATE TABLE `user_folders` (
+    `id` VARCHAR(64) NOT NULL,
+    `phone` VARCHAR(20) NOT NULL,
+    `title` VARCHAR(128) NOT NULL,
+    `filters` JSON NOT NULL DEFAULT ('[]'),
+    `options` JSON NOT NULL DEFAULT ('[]'),
+    `source_id` INT NOT NULL DEFAULT 1,
+    `update_time` BIGINT NOT NULL DEFAULT 0,
+    `sort_order` INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`, `phone`)
 );

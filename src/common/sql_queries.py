@@ -13,6 +13,12 @@ class SQLQueries:
 
     INSERT_USER_DATA = """
         INSERT INTO user_data
-        (phone, folders, user_config, chat_config)
-        VALUES (%s, %s, %s, %s)
+        (phone, user_config, chat_config)
+        VALUES (%s, %s, %s)
+    """
+
+    INSERT_DEFAULT_FOLDER = """
+        INSERT INTO user_folders
+        (id, phone, title, sort_order)
+        VALUES ('all.chat.folder', %s, 'Все', 0)
     """

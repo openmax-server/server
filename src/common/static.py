@@ -196,25 +196,6 @@ class Static:
         ]},
     ]
 
-    ### Заглушка для папок
-    ALL_CHAT_FOLDER = [{
-        "id": "all.chat.folder",
-        "title": "Все",
-        "filters": [],
-        "updateTime": 0,
-        "options": [],
-        "sourceId": 1
-    }]
-
-    ALL_CHAT_FOLDER_ORDER = ["all.chat.folder"]
-
-    ### Стандартные папки с настройками пользователя
-    USER_FOLDERS = {
-        "folders": [], 
-        "foldersOrder": [], 
-        "allFilterExcludeFolders": []
-    }
-
     USER_SETTINGS = {
         "CHATS_PUSH_NOTIFICATION": "ON",
         "PUSH_DETAILS": True,

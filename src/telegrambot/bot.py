@@ -105,10 +105,15 @@ class TelegramBot:
                         self.sql_queries.INSERT_USER_DATA,
                         (
                             new_phone,  # phone
-                            json.dumps(self.static.USER_FOLDERS),  # folders
                             json.dumps(self.static.USER_SETTINGS),  # user settings
                             json.dumps({}),  # chat_config
                         ),
+                    )
+
+                    # Добавляем дефолтную папку
+                    await cursor.execute(
+                        self.sql_queries.INSERT_DEFAULT_FOLDER,
+                        (new_phone,),
                     )
 
                     await message.answer(
