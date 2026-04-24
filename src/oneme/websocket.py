@@ -246,6 +246,15 @@ class OnemeWS:
                             seq,
                             websocket,
                         )
+                    case self.opcodes.CONFIG:
+                        await self.auth_required(
+                            userPhone,
+                            self.processors.update_config,
+                            payload,
+                            seq,
+                            websocket,
+                            userPhone,
+                        )
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
         except websockets.exceptions.ConnectionClosed:

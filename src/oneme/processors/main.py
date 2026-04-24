@@ -129,3 +129,55 @@ class MainProcessors(BaseProcessor):
 
         # Отправляем
         await self._send(writer, response)
+
+    async def update_config(self, payload, seq, writer, userPhone):
+        """
+            Обработчик 22 опкода (config)
+            Он отвечает за обновление настроек приватности
+            и пуш токена для пушей
+        """
+        # Пейлоад, который отдадим клиенту
+        # а отдавать его нужно только при изменении настроек приватности
+        result_payload = None
+
+        if payload.get("pushToken") and payload.get("pushOptions"):
+            # TODO: Когда сядем за пуши, сделать тут обновление пуш токена
+            pass
+        elif payload.get("settings") and payload.get("settings").get("user"):
+            """Обновление настроек приватности"""
+            new_settings = payload.get("settings").get("user")
+
+            async with self.db_pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    # Получаем текущий конфиг
+                    await cursor.execute(
+                        "SELECT user_config FROM user_data WHERE phone = %s", (userPhone,)
+                    )
+                    row = await cursor.fetchone()
+
+                    if row:
+                        current_config = json.loads(row.get("user_config"))
+
+                        # Обновляем настройки
+                        for key, value in new_settings.items():
+                            if key in current_config:
+                                current_config[key] = value
+
+                        # Сохраняем обновлённый конфиг
+                        await cursor.execute(
+                            "UPDATE user_data SET user_config = %s WHERE phone = %s",
+                            (json.dumps(current_config), userPhone)
+                        )
+
+                        result_payload = {
+                            "user": current_config,
+                            "hash": "0"
+                        }
+
+        # Собираем пакет
+        response = self.proto.pack_packet(
+            cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.CONFIG, payload=result_payload
+        )
+
+        # Отправляем
+        await self._send(writer, response)

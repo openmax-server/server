@@ -530,6 +530,12 @@ class AuthProcessors(BaseProcessor):
                 for chat in user_chats:
                     chats.append(chat.get("chat_id"))
 
+                # Обновляем юзер конфиг
+                updated_user_config = await self.tools.update_user_config(
+                    cursor, token_data.get("phone"),
+                    user_data.get("user_config"), self.static.USER_SETTINGS
+                )
+
         # Аватарка с биографией
         photoId = None if not user.get("avatar_id") else int(user.get("avatar_id"))
         avatar_url = None if not photoId else self.config.avatar_base_url + photoId
@@ -572,7 +578,7 @@ class AuthProcessors(BaseProcessor):
             "presence": {},
             "config": {
                 "server": self.server_config,
-                "user": json.loads(user_data.get("user_config")),
+                "user": updated_user_config,
             },
             "token": token,
             "videoChatHistory": False,

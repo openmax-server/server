@@ -300,6 +300,12 @@ class AuthProcessors(BaseProcessor):
                         chat.get("chat_id")
                     )
 
+                # Обновляем юзер конфиг
+                updated_user_config = await self.tools.update_user_config(
+                    cursor, token_data.get("phone"),
+                    user_data.get("user_config"), self.static.USER_SETTINGS
+                )
+
         # Аватарка с биографией
         photo_id = None if not user.get("avatar_id") else int(user.get("avatar_id"))
         avatar_url = None if not photo_id else self.config.avatar_base_url + str(photo_id)
@@ -335,7 +341,7 @@ class AuthProcessors(BaseProcessor):
             "config": {
                 "hash": "e5903aa8-0000000000000000-80000106-0000000000000001-00000001-0000000000000000-00000000-2-00000001-0000019c9559d057",
                 "server": self.server_config,
-                "user": json.loads(user_data.get("user_config")),
+                "user": updated_user_config,
                 "chatFolders": {
                     "FOLDERS": [],
                     "ALL_FILTER_EXCLUDE": []

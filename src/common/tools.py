@@ -503,3 +503,17 @@ class Tools:
 
         # Возвращаем
         return unique_id
+
+    async def update_user_config(self, cursor, phone, user_settings, default_settings):
+        """Функция для обновления юзер конфига из бд в случае его изменения"""
+
+        user_config = json.loads(user_settings)
+        updated_config = {**default_settings, **user_config}
+
+        if updated_config != user_config:
+            await cursor.execute(
+                "UPDATE user_data SET user_config = %s WHERE phone = %s",
+                (json.dumps(updated_config), phone),
+            )
+
+        return updated_config
