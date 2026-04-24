@@ -16,7 +16,6 @@ from oneme.models import (
     VerifyCodePayloadModel,
 )
 
-
 class AuthProcessors(BaseProcessor):
     def __init__(
         self,
@@ -29,6 +28,23 @@ class AuthProcessors(BaseProcessor):
         super().__init__(db_pool, clients, send_event, type)
         self.server_config = OnemeConfig().SERVER_CONFIG
         self.telegram_bot = telegram_bot
+
+    def _check_legacy_version(self, app_version):
+        """
+            Функция определения легаси версий клиентов,
+            для которых потребуются некоторые корректировки ответов сервера
+
+            Сейчас данная функция используется для форматирования ответов
+            под версии ниже 25.8.0
+
+            Функция вернет True, если версия слишком старая, 
+            или False в противном случае
+
+            [fun fact] С 25.8.0, похоже, начали корректировать протокол, поскольку это
+            самая старая версия, которая работала без всяких корректировок сервера
+        """
+
+        return tuple(int(v) for v in app_version.split(".")) < (25, 8, 0)
 
     async def _send_banners(self, writer):
         """Функция отправки баннеров клиенту"""
@@ -181,7 +197,7 @@ class AuthProcessors(BaseProcessor):
         await self._send(writer, packet)
         self.logger.debug(f"Код для {phone}: {code} (существующий={user_exists})")
 
-    async def auth(self, payload, seq, writer, deviceType, deviceName):
+    async def auth(self, payload, seq, writer, deviceType, deviceName, appVersion):
         """Обработчик проверки кода"""
         try:
             VerifyCodePayloadModel.model_validate(payload)
@@ -284,6 +300,11 @@ class AuthProcessors(BaseProcessor):
             None if not account.get("description") else account.get("description")
         )
 
+        if self._check_legacy_version(appVersion):
+            include_profile_options = False
+        else:
+            include_profile_options = True
+
         # Собираем данные пакета
         payload = {
             "tokenAttrs": {"LOGIN": {"token": login}},
@@ -299,7 +320,7 @@ class AuthProcessors(BaseProcessor):
                 description=description,
                 accountStatus=int(account.get("accountstatus")),
                 profileOptions=json.loads(account.get("profileoptions")),
-                includeProfileOptions=True,
+                includeProfileOptions=include_profile_options,
                 username=account.get("username"),
             ),
         }
@@ -312,7 +333,7 @@ class AuthProcessors(BaseProcessor):
         # Отправляем
         await self._send(writer, packet)
 
-    async def auth_confirm(self, payload, seq, writer, deviceType, deviceName):
+    async def auth_confirm(self, payload, seq, writer, deviceType, deviceName, appVersion):
         """Обработчик подтверждения регистрации нового пользователя"""
         # Валидируем данные пакета
         try:
@@ -441,6 +462,11 @@ class AuthProcessors(BaseProcessor):
                     ),
                 )
 
+        if self._check_legacy_version(appVersion):
+            include_profile_options = False
+        else:
+            include_profile_options = True
+
         # Генерируем профиль
         profile = self.tools.generate_profile(
             id=user_id,
@@ -454,7 +480,7 @@ class AuthProcessors(BaseProcessor):
             description=None,
             accountStatus=0,
             profileOptions=[],
-            includeProfileOptions=True,
+            includeProfileOptions=include_profile_options,
             username=None,
         )
 
@@ -480,7 +506,7 @@ class AuthProcessors(BaseProcessor):
             f"Новый пользователь зарегистрирован: phone={phone} id={user_id} name={first_name} {last_name}"
         )
 
-    async def login(self, payload, seq, writer):
+    async def login(self, payload, seq, writer, appVersion):
         """Обработчик авторизации клиента на сервере"""
         # Валидируем данные пакета
         try:
@@ -550,6 +576,11 @@ class AuthProcessors(BaseProcessor):
         avatar_url = None if not photoId else self.config.avatar_base_url + photoId
         description = None if not user.get("description") else user.get("description")
 
+        if self._check_legacy_version(appVersion):
+            include_profile_options = False
+        else:
+            include_profile_options = True
+
         # Генерируем профиль
         profile = self.tools.generate_profile(
             id=user.get("id"),
@@ -563,7 +594,7 @@ class AuthProcessors(BaseProcessor):
             description=description,
             accountStatus=int(user.get("accountstatus")),
             profileOptions=json.loads(user.get("profileoptions")),
-            includeProfileOptions=True,
+            includeProfileOptions=include_profile_options,
             username=user.get("username"),
         )
 

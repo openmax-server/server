@@ -45,6 +45,7 @@ class OnemeMobile:
 
         deviceType = None
         deviceName = None
+        appVersion = None
 
         userPhone = None
         userId = None
@@ -89,7 +90,7 @@ class OnemeMobile:
 
                 match opcode:
                     case self.opcodes.SESSION_INIT:
-                        deviceType, deviceName = await self.processors.session_init(
+                        deviceType, deviceName, appVersion = await self.processors.session_init(
                             payload, seq, writer
                         )
                     case self.opcodes.AUTH_REQUEST:
@@ -112,7 +113,7 @@ class OnemeMobile:
                             )
                         else:
                             await self.processors.auth(
-                                payload, seq, writer, deviceType, deviceName
+                                payload, seq, writer, deviceType, deviceName, appVersion
                             )
                     case self.opcodes.AUTH_CONFIRM:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
@@ -124,7 +125,7 @@ class OnemeMobile:
                             )
                         elif payload and payload.get("tokenType") == "REGISTER":
                             await self.processors.auth_confirm(
-                                payload, seq, writer, deviceType, deviceName
+                                payload, seq, writer, deviceType, deviceName, appVersion
                             )
                         else:
                             self.logger.warning(
@@ -143,7 +144,7 @@ class OnemeMobile:
                                 userPhone,
                                 userId,
                                 hashedToken,
-                            ) = await self.processors.login(payload, seq, writer)
+                            ) = await self.processors.login(payload, seq, writer, appVersion)
 
                             if userPhone:
                                 await self._finish_auth(

@@ -20,11 +20,13 @@ class MainProcessors(BaseProcessor):
         except pydantic.ValidationError as error:
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
             await self._send_error(seq, self.opcodes.SESSION_INIT, self.error_types.INVALID_PAYLOAD, writer)
-            return None, None
+            return None, None, None
 
         # Получаем данные из пакета
-        deviceType = payload.get("userAgent").get("deviceType")
-        deviceName = payload.get("userAgent").get("deviceName")
+        userAgent = payload.get("userAgent")
+        deviceType = userAgent.get("deviceType")
+        deviceName = userAgent.get("deviceName")
+        appVersion = userAgent.get("appVersion")
 
         # Данные пакета
         payload = {
@@ -43,7 +45,7 @@ class MainProcessors(BaseProcessor):
 
         # Отправляем
         await self._send(writer, packet)
-        return deviceType, deviceName
+        return deviceType, deviceName, appVersion
     
     async def ping(self, payload, seq, writer):
         """Обработчик пинга"""

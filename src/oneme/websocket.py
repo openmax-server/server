@@ -37,6 +37,7 @@ class OnemeWS:
 
         deviceType = None
         deviceName = None
+        appVersion = None
 
         userPhone = None
         userId = None
@@ -63,7 +64,7 @@ class OnemeWS:
 
                 match opcode:
                     case self.opcodes.SESSION_INIT:
-                        deviceType, deviceName = await self.processors.session_init(
+                        deviceType, deviceName, appVersion = await self.processors.session_init(
                             payload, seq, websocket
                         )
                     case self.opcodes.AUTH_REQUEST:
@@ -86,7 +87,7 @@ class OnemeWS:
                             )
                         else:
                             await self.processors.auth(
-                                payload, seq, websocket, deviceType, deviceName
+                                payload, seq, websocket, deviceType, deviceName, appVersion
                             )
                     case self.opcodes.AUTH_CONFIRM:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
@@ -98,7 +99,7 @@ class OnemeWS:
                             )
                         elif payload and payload.get("tokenType") == "REGISTER":
                             await self.processors.auth_confirm(
-                                payload, seq, websocket, deviceType, deviceName
+                                payload, seq, websocket, deviceType, deviceName, appVersion
                             )
                         else:
                             self.logger.warning(
@@ -117,7 +118,7 @@ class OnemeWS:
                                 userPhone,
                                 userId,
                                 hashedToken,
-                            ) = await self.processors.login(payload, seq, websocket)
+                            ) = await self.processors.login(payload, seq, websocket, deviceType, appVersion)
 
                             if userPhone:
                                 await self._finish_auth(
