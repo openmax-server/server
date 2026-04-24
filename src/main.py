@@ -1,12 +1,80 @@
 # Импортирование библиотек
-import ssl, logging, asyncio
+import asyncio
+import logging
+import ssl
+
 from common.config import ServerConfig
-from oneme_tcp.controller import OnemeMobileController
+from oneme.controller import OnemeController
+from tamtam.controller import TTController
 from telegrambot.controller import TelegramBotController
-from tamtam_tcp.controller import TTMobileController
-from tamtam_ws.controller import TTWSController
+
 # Конфиг сервера
 server_config = ServerConfig()
+
+
+class SQLiteCursorCompat:
+    def __init__(self, connection):
+        self.connection = connection
+        self.cursor = None
+
+    async def __aenter__(self):
+        self.cursor = await self.connection.cursor()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if self.cursor is not None:
+            await self.cursor.close()
+        self.cursor = None
+
+    @property
+    def lastrowid(self):
+        return None if self.cursor is None else self.cursor.lastrowid
+
+    def _normalize_query(self, query):
+        return query.replace("%s", "?").replace(
+            "UNIX_TIMESTAMP()", "CAST(strftime('%s','now') AS INTEGER)"
+        )
+
+    async def execute(self, query, params=()):
+        normalized_query = self._normalize_query(query)
+        if params is None:
+            params = ()
+        elif not isinstance(params, (tuple, list, dict)):
+            params = (params,)
+        await self.cursor.execute(normalized_query, params)
+
+    async def fetchone(self):
+        row = await self.cursor.fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    async def fetchall(self):
+        rows = await self.cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+class SQLiteConnectionCompat:
+    def __init__(self, connection):
+        self.connection = connection
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    def cursor(self):
+        return SQLiteCursorCompat(self.connection)
+
+
+class SQLitePoolCompat:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def acquire(self):
+        return SQLiteConnectionCompat(self.connection)
+
 
 async def init_db():
     """Инициализация базы данных"""
@@ -15,6 +83,7 @@ async def init_db():
 
     if server_config.db_type == "mysql":
         import aiomysql
+
         db = await aiomysql.create_pool(
             host=server_config.db_host,
             port=server_config.db_port,
@@ -22,15 +91,18 @@ async def init_db():
             password=server_config.db_password,
             db=server_config.db_name,
             cursorclass=aiomysql.DictCursor,
-            autocommit=True
+            autocommit=True,
         )
     elif server_config.db_type == "sqlite":
         import aiosqlite
-        raw_db = await aiosqlite.connect(server_config.db_file)
-        db["acquire"] = raw_db
+
+        raw_db = await aiosqlite.connect(server_config.db_file, isolation_level=None)
+        raw_db.row_factory = aiosqlite.Row
+        db = SQLitePoolCompat(raw_db)
 
     # Возвращаем
     return db
+
 
 def init_ssl():
     """Создание контекста SSL"""
@@ -41,11 +113,12 @@ def init_ssl():
     # Возвращаем
     return ssl_context
 
+
 def set_logging():
     """Настройка уровня логирования"""
     # Настройка уровня логирования
     log_level = server_config.log_level
-    
+
     if log_level == "debug":
         logging.basicConfig(level=logging.DEBUG)
     elif log_level == "info":
@@ -53,12 +126,14 @@ def set_logging():
     else:
         logging.basicConfig(level=None)
 
+
 async def main():
     """Запуск сервера"""
+
     async def api_event(target, eventData):
-        for client in api.get("clients").get(target, {}).get("clients", {}):
+        for client in api.get("clients", {}).get(target, {}).get("clients", {}):
             await controllers[client["protocol"]].event(target, client, eventData)
-        
+
     set_logging()
     db = await init_db()
     ssl_context = init_ssl()
@@ -68,25 +143,23 @@ async def main():
         "db": db,
         "ssl": ssl_context,
         "clients": clients,
-        "event": api_event
+        "event": api_event,
+        "origins": server_config.origins,
     }
 
     controllers = {
-        "oneme_mobile": OnemeMobileController(),
-        "tamtam_mobile": TTMobileController(),
-        "tamtam_ws": TTWSController(),
-        "telegrambot": TelegramBotController()
+        "oneme": OnemeController(),
+        "tamtam": TTController(),
+        "telegrambot": TelegramBotController(),
     }
 
     api["telegram_bot"] = controllers["telegrambot"]
 
-    tasks = [
-        controller.launch(api)
-        for controller in controllers.values()
-    ]
+    tasks = [controller.launch(api) for controller in controllers.values()]
 
     # Запускаем контроллеры
     await asyncio.gather(*tasks)
-    
+
+
 if __name__ == "__main__":
     asyncio.run(main())

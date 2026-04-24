@@ -45,3 +45,9 @@ class ServerConfig:
     telegram_bot_token = os.getenv("telegram_bot_token") or "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     telegram_bot_enabled = bool(os.getenv("telegram_bot_enabled")) or True
     telegram_whitelist_ids = [x.strip() for x in os.getenv("telegram_whitelist_ids", "").split(",") if x.strip()]
+
+    ### origins
+    origins = [x.strip() for x in os.getenv("origins", "").split(",") if x.strip()] if os.getenv("origins") else None
+
+    ### sms шлюз
+    sms_gateway_url = os.getenv("sms_gateway_url", "")

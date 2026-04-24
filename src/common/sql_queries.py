@@ -6,13 +6,13 @@ class SQLQueries:
 
     INSERT_USER = """
         INSERT INTO users 
-        (phone, telegram_id, firstname, lastname, username, 
+        (id, phone, telegram_id, firstname, lastname, username, 
          profileoptions, options, accountstatus, updatetime, lastseen) 
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     INSERT_USER_DATA = """
         INSERT INTO user_data
-        (phone, chats, contacts, folders, user_config, chat_config)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        (phone, folders, user_config, chat_config)
+        VALUES (%s, %s, %s, %s)
     """

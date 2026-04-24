@@ -1,0 +1,39 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${oneme_tcp_port:-443}:443"
+      - "${tamtam_tcp_port:-4433}:4433"
+      - "${oneme_ws_port:-81}:81"
+      - "${tamtam_ws_port:-82}:82"
+    volumes:
+      - /etc/letsencrypt/live/${domain}/fullchain.pem:/certs/cert.pem:ro
+      - /etc/letsencrypt/live/${domain}/privkey.pem:/certs/key.pem:ro
+    env_file:
+      - .env
+    environment:
+      - db_host=db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${db_password:-openmax}
+      MYSQL_DATABASE: ${db_name:-openmax}
+      MYSQL_USER: ${db_user:-openmax}
+      MYSQL_PASSWORD: ${db_password:-openmax}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./tables.sql:/docker-entrypoint-initdb.d/tables.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
