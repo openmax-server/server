@@ -32,15 +32,41 @@ class AuthProcessors(BaseProcessor):
 
     async def _send_banners(self, writer):
         """Функция отправки баннеров клиенту"""
+        # Итоговый список баннеров для отдачи клиенту
+        banners = []
+
+        async with self.db_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                # Собираем все баннеры, которые есть в бд
+                await cursor.execute(
+                    "SELECT * FROM banners WHERE enabled = TRUE"
+                )
+                rows = await cursor.fetchall()
+
+                # Добавляем каждый баннер в лист
+                for row in rows:
+                    banner = {
+                        "description": row.get("description"),
+                        "title": row.get("title"),
+                        "priority": row.get("priority"),
+                        "type": row.get("type"),
+                        "hideCloseButton": bool(row.get("hide_close_button")),
+                        "rerun": row.get("rerun"),
+                        "url": row.get("url"),
+                        "animojiId": row.get("animoji_id"),
+                        "repeat": row.get("repeat"),
+                        "hideOnClick": bool(row.get("hide_on_click")),
+                        "id": row.get("id"),
+                        "isTitleAnimated": bool(row.get("is_title_animated")),
+                    }
+
+                    banners.append(banner)
+
+        # Собираем данные пакета
         payload = {
-            "showTime": 86400000, # Сколько будет показываться баннер, тут сутки в миллисекундах
-                                  # можно в будущем переделать, и сделать выбор в конфигурации
-                                  # думаю, было бы прикольно
+            "showTime": 86400000,
             "updateTime": int(time.time() * 1000),
-            "banners": [
-                # TODO: разобраться как работают баннеры и их реализовать
-                # думаю админам инстансов было бы прикольно, и нам
-            ]
+            "banners": banners
         }
 
         # Собираем пакет
@@ -557,10 +583,6 @@ class AuthProcessors(BaseProcessor):
         packet = self.proto.pack_packet(
             cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.LOGIN, payload=payload
         )
-
-        # print(
-        #     json.dumps(payload, indent=4)
-        # )
 
         # Отправляем
         await self._send(writer, packet)

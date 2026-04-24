@@ -78,3 +78,21 @@ CREATE TABLE `contacts` (
     `is_blocked` BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (`owner_id`, `contact_id`)
 );
+
+CREATE TABLE `banners` (
+    `id` VARCHAR(64) NOT NULL,
+    `title` VARCHAR(256) NOT NULL,
+    `description` VARCHAR(512) NOT NULL,
+    `url` VARCHAR(512) NOT NULL,
+    `type` INT NOT NULL DEFAULT 1,
+    `priority` INT NOT NULL DEFAULT 0,
+    `animoji_id` INT NOT NULL DEFAULT 0,
+    `repeat` INT NOT NULL DEFAULT 1,
+    `rerun` BIGINT NOT NULL DEFAULT 0,
+    `hide_close_button` BOOLEAN NOT NULL DEFAULT FALSE,
+    `hide_on_click` BOOLEAN NOT NULL DEFAULT FALSE,
+    `is_title_animated` BOOLEAN NOT NULL DEFAULT FALSE,
+    `enabled` BOOLEAN NOT NULL DEFAULT TRUE,
+    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`)
+);
