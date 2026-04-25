@@ -1,6 +1,4 @@
-import hashlib
 import json
-import random
 import time
 
 
@@ -367,14 +365,12 @@ class Tools:
 
                 row = await cursor.fetchone() or {}
                 last_message_id = row.get("id") or 0  # последнее id сообщения в чате
-                message_id = self.generate_id()
                 message_time = int(time.time() * 1000)  # время отправки сообщения
 
                 # Вносим новое сообщение в таблицу
                 await cursor.execute(
-                    "INSERT INTO `messages` (id, chat_id, sender, time, text, attaches, cid, elements, type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO `messages` (chat_id, sender, time, text, attaches, cid, elements, type) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                     (
-                        message_id,
                         chatId,
                         senderId,
                         message_time,
@@ -385,6 +381,8 @@ class Tools:
                         type,
                     ),
                 )
+
+                message_id = cursor.lastrowid
 
         # Возвращаем айдишки
         return int(message_id), int(last_message_id), message_time
@@ -489,20 +487,6 @@ class Tools:
     async def auth_required(self, userPhone, coro, *args):
         if userPhone:
             await coro(*args)
-
-    def generate_id(self):
-        # Получаем время в юниксе
-        timestamp = int(time.time())
-
-        # Генерируем дополнительно рандомное число
-        random_number = random.randint(0, 9999)
-
-        # Собираем их вместе и вычисляем хеш
-        combined = f"{timestamp}{random_number}".encode()
-        unique_id = int(hashlib.md5(combined).hexdigest(), 16) % 1000000000
-
-        # Возвращаем
-        return unique_id
 
     async def update_user_config(self, cursor, phone, user_settings, default_settings):
         """Функция для обновления юзер конфига из бд в случае его изменения"""

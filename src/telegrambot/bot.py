@@ -86,7 +86,6 @@ class TelegramBot:
                     await cursor.execute(
                         self.sql_queries.INSERT_USER,
                         (
-                            self.tools.generate_id(),
                             new_phone,  # phone
                             tg_id,  # telegram_id
                             message.from_user.first_name[:59],  # firstname

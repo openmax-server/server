@@ -399,12 +399,11 @@ class AuthProcessors(BaseProcessor):
                 await cursor.execute(
                     """
                     INSERT INTO users
-                        (id, phone, telegram_id, firstname, lastname, username,
+                        (phone, telegram_id, firstname, lastname, username,
                         profileoptions, options, accountstatus, updatetime, lastseen)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        self.tools.generate_id(),
                         phone,
                         None,
                         first_name,

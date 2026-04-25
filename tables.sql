@@ -1,5 +1,5 @@
 CREATE TABLE `users` (
-    `id` INT NOT NULL,
+    `id` INT NOT NULL AUTO_INCREMENT,
     `phone` VARCHAR(20) UNIQUE,
     `telegram_id` VARCHAR(64) UNIQUE,
     `firstname` VARCHAR(59) NOT NULL,
@@ -51,7 +51,7 @@ CREATE TABLE `chats` (
 );
 
 CREATE TABLE `messages` (
-    `id` INT NOT NULL,
+    `id` INT NOT NULL AUTO_INCREMENT,
     `chat_id` INT NOT NULL,
     `sender` INT NOT NULL,
     `time` VARCHAR(32) NOT NULL,
