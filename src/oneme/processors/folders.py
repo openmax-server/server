@@ -46,10 +46,6 @@ class FoldersProcessors(BaseProcessor):
             "allFilterExcludeFolders": []
         }
 
-        print(
-            json.dumps(payload, indent=4)
-        )
-
         # Собираем пакет
         packet = self.proto.pack_packet(
             cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.FOLDERS_GET, payload=payload
