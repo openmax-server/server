@@ -75,6 +75,12 @@ class SendMessagePayloadModel(pydantic.BaseModel):
 class SyncFoldersPayloadModel(pydantic.BaseModel):
     folderSync: int
 
+class CreateFolderPayloadModel(pydantic.BaseModel):
+    id: str
+    title: str
+    filters: list = []
+    include: list = []
+
 class SearchChatsPayloadModel(pydantic.BaseModel):
     chatIds: list
 

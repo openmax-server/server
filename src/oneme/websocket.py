@@ -168,6 +168,15 @@ class OnemeWS:
                             websocket,
                             userPhone,
                         )
+                    case self.opcodes.FOLDERS_UPDATE:
+                        await self.auth_required(
+                            userPhone,
+                            self.processors.folders_update,
+                            payload,
+                            seq,
+                            websocket,
+                            userPhone,
+                        )
                     case self.opcodes.SESSIONS_INFO:
                         await self.auth_required(
                             userPhone,

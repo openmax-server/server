@@ -102,6 +102,7 @@ CREATE TABLE `user_folders` (
     `phone` VARCHAR(20) NOT NULL,
     `title` VARCHAR(128) NOT NULL,
     `filters` JSON NOT NULL DEFAULT ('[]'),
+    `include` JSON NOT NULL DEFAULT ('[]'),
     `options` JSON NOT NULL DEFAULT ('[]'),
     `source_id` INT NOT NULL DEFAULT 1,
     `update_time` BIGINT NOT NULL DEFAULT 0,
