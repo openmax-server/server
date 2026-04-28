@@ -607,6 +607,10 @@ class AuthProcessors(BaseProcessor):
             user.get("id"), self.db_pool, self.config.avatar_base_url
         )
 
+        # Собираем статусы контактов
+        contact_ids = [c.get("id") for c in contacts if c.get("id") is not None]
+        presence = await self.tools.collect_presence(contact_ids, self.clients, self.db_pool)
+
         # Формируем данные пакета
         payload = {
             "profile": profile,
@@ -614,17 +618,17 @@ class AuthProcessors(BaseProcessor):
             "chatMarker": 0,
             "messages": {},
             "contacts": contacts,
-            "presence": {},
+            "presence": presence,
             "config": {
+                "hash": "0",
                 "server": self.server_config,
                 "user": updated_user_config,
             },
             "token": token,
             "videoChatHistory": False,
             "time": int(time.time() * 1000),
-        }
+        }        # Собираем пакет
 
-        # Собираем пакет
         packet = self.proto.pack_packet(
             cmd=self.proto.CMD_OK, seq=seq, opcode=self.opcodes.LOGIN, payload=payload
         )

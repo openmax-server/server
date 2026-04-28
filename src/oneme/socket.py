@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 import traceback
 
 from common.opcodes import Opcodes
@@ -32,7 +33,7 @@ class OnemeMobile:
         self.opcodes = Opcodes()
 
         # rate limiter anti ddos brute force protection
-        self.auth_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
+        self.auth_rate_limiter = RateLimiter(max_attempts=15, window_seconds=60)
 
         self.read_timeout = 300  # Таймаут чтения из сокета (секунды)
         self.max_read_size = 65536  # Максимальный размер данных из сокета
@@ -156,7 +157,7 @@ class OnemeMobile:
                         )
                         break
                     case self.opcodes.PING:
-                        await self.processors.ping(payload, seq, writer)
+                        await self.processors.ping(payload, seq, writer, userId)
                     case self.opcodes.LOG:
                         await self.processors.log(payload, seq, writer)
                     case self.opcodes.ASSETS_UPDATE:
@@ -301,6 +302,23 @@ class OnemeMobile:
                             userPhone,
                             hashedToken,
                         )
+                    case self.opcodes.CONTACT_UPDATE:
+                        await self.auth_required(
+                            userPhone,
+                            self.processors.contact_update,
+                            payload,
+                            seq,
+                            writer,
+                            userId,
+                        )
+                    case self.opcodes.CONTACT_PRESENCE:
+                        await self.auth_required(
+                            userPhone,
+                            self.processors.contact_presence,
+                            payload,
+                            seq,
+                            writer
+                        )
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
         except Exception as e:
@@ -332,6 +350,8 @@ class OnemeMobile:
             self.clients[id] = {
                 "phone": phone,
                 "id": id,
+                "status": 2,
+                "last_seen": 0,
                 "clients": [
                     {
                         "writer": writer,
@@ -341,6 +361,38 @@ class OnemeMobile:
                     }
                 ],
             }
+
+        await self._broadcast_presence(id, True)
+
+    async def _broadcast_presence(self, userId, online):
+        now = int(time.time())
+        now_ms = int(time.time() * 1000)
+
+        if online:
+            presence_data = {"on": "ON", "seen": now, "status": 1}
+        else:
+            presence_data = {"seen": now}
+
+        async with self.db_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT owner_id FROM contacts WHERE contact_id = %s",
+                    (userId,)
+                )
+                contact_owners = await cursor.fetchall()
+
+        for row in contact_owners:
+            owner_id = int(row.get("owner_id"))
+            if owner_id in self.clients:
+                await self.processors.event(
+                    owner_id,
+                    {
+                        "eventType": "presence",
+                        "userId": userId,
+                        "presence": presence_data,
+                        "time": now_ms,
+                    }
+                )
 
     async def _end_session(self, id, ip, port):
         """Завершение сессии"""
@@ -356,6 +408,20 @@ class OnemeMobile:
         for i, client in enumerate(clients):
             if (client.get("ip"), client.get("port")) == (ip, port):
                 clients.pop(i)
+
+        if not clients:
+            now = int(time.time())
+            user["status"] = 0
+            user["last_seen"] = now
+
+            async with self.db_pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        "UPDATE users SET lastseen = %s WHERE id = %s",
+                        (str(now), id)
+                    )
+
+            await self._broadcast_presence(id, False)
 
     async def start(self):
         """Функция для запуска сервера"""

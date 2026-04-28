@@ -1,9 +1,10 @@
 import pydantic
 import json
+import time
 from classes.baseprocessor import BaseProcessor
 from oneme.models import (
-    HelloPayloadModel, 
-    PingPayloadModel, 
+    HelloPayloadModel,
+    PingPayloadModel,
     UpdateProfilePayloadModel
 )
 
@@ -30,6 +31,7 @@ class MainProcessors(BaseProcessor):
 
         # Данные пакета
         payload = {
+            "callsSeed": int(time.time() * 1000),
             "location": "RU",
             "app-update-type": 0,  # 1 = принудительное обновление
             "reg-country-code": self.static.REG_COUNTRY_CODES,
@@ -47,7 +49,7 @@ class MainProcessors(BaseProcessor):
         await self._send(writer, packet)
         return deviceType, deviceName, appVersion
     
-    async def ping(self, payload, seq, writer):
+    async def ping(self, payload, seq, writer, userId=None):
         """Обработчик пинга"""
         # Валидируем данные пакета
         try:
@@ -56,6 +58,58 @@ class MainProcessors(BaseProcessor):
             self.logger.error(f"Возникли ошибки при валидации пакета: {error}")
             await self._send_error(seq, self.opcodes.PING, self.error_types.INVALID_PAYLOAD, writer)
             return
+
+        # Обновляем статус пользователя, если он авторизован
+        # и в пакете отправлен интерактив
+        interactive = payload.get("interactive") if payload else None
+        if userId and interactive is not None:
+            now = int(time.time())
+            user = self.clients.get(userId)
+            if user:
+                if interactive:
+                    user["status"] = 2
+                    user["last_seen"] = now
+                else:
+                    user["status"] = 0
+                    user["last_seen"] = now
+
+                # Сохраняем последнее время посещения
+                async with self.db_pool.acquire() as conn:
+                    async with conn.cursor() as cursor:
+                        await cursor.execute(
+                            "UPDATE users SET lastseen = %s WHERE id = %s",
+                            (str(now), userId)
+                        )
+
+                # Рассылаем статус контактам пользователя
+                now_ms = int(time.time() * 1000)
+                if interactive:
+                    presence_data = {"on": "ON", "seen": now, "status": 1}
+                else:
+                    presence_data = {"seen": now}
+
+                # Находим всех, у кого этот пользователь в контактах
+                async with self.db_pool.acquire() as conn2:
+                    async with conn2.cursor() as cursor2:
+                        await cursor2.execute(
+                            "SELECT owner_id FROM contacts WHERE contact_id = %s",
+                            (userId,)
+                        )
+                        contact_owners = await cursor2.fetchall()
+
+                # Рассылаем
+                for row in contact_owners:
+                    owner_id = int(row.get("owner_id"))
+                    if owner_id in self.clients:
+                        await self.event(
+                            owner_id,
+                            {
+                                "eventType": "presence",
+                                "userId": userId,
+                                "presence": presence_data,
+                                "time": now_ms,
+                            }
+                        )
 
         # Собираем пакет
         response = self.proto.pack_packet(

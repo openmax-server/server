@@ -74,6 +74,20 @@ class OnemeController(ControllerBase):
             packet = self.proto.pack_packet(
                 cmd=0, seq=1, opcode=self.opcodes.NOTIF_PROFILE, payload=payload
             )
+        elif eventType == "presence":
+            userId = eventData.get("userId")
+            presence = eventData.get("presence")
+            event_time = eventData.get("time")
+
+            payload = {
+                "userId": userId,
+                "presence": presence,
+                "time": event_time
+            }
+
+            packet = self.proto.pack_packet(
+                cmd=0, seq=1, opcode=self.opcodes.NOTIF_PRESENCE, payload=payload
+            )
 
         # Отправляем пакет
         writer.write(packet)

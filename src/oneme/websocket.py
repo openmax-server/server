@@ -1,4 +1,5 @@
 import logging
+import time
 import traceback
 import websockets
 from common.proto_web import WebProto
@@ -130,7 +131,7 @@ class OnemeWS:
                         )
                         break
                     case self.opcodes.PING:
-                        await self.processors.ping(payload, seq, websocket)
+                        await self.processors.ping(payload, seq, websocket, userId)
                     case self.opcodes.LOG:
                         await self.processors.log(payload, seq, websocket)
                     case self.opcodes.ASSETS_UPDATE:
@@ -275,6 +276,23 @@ class OnemeWS:
                             userPhone,
                             hashedToken,
                         )
+                    case self.opcodes.CONTACT_UPDATE:
+                        await self.auth_required(
+                            userPhone,
+                            self.processors.contact_update,
+                            payload,
+                            seq,
+                            websocket,
+                            userId,
+                        )
+                    case self.opcodes.CONTACT_PRESENCE:
+                        await self.auth_required(
+                            userPhone,
+                            self.processors.contact_presence,
+                            payload,
+                            seq,
+                            websocket
+                        )
                     case _:
                         self.logger.warning(f"Неизвестный опкод {opcode}")
         except websockets.exceptions.ConnectionClosed:
@@ -308,6 +326,8 @@ class OnemeWS:
             self.clients[id] = {
                 "phone": phone,
                 "id": id,
+                "status": 2,
+                "last_seen": 0,
                 "clients": [
                     {
                         "writer": websocket,
@@ -317,6 +337,38 @@ class OnemeWS:
                     }
                 ]
             }
+
+        await self._broadcast_presence(id, True)
+
+    async def _broadcast_presence(self, userId, online):
+        now = int(time.time())
+        now_ms = int(time.time() * 1000)
+
+        if online:
+            presence_data = {"on": "ON", "seen": now, "status": 1}
+        else:
+            presence_data = {"seen": now}
+
+        async with self.db_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT owner_id FROM contacts WHERE contact_id = %s",
+                    (userId,)
+                )
+                contact_owners = await cursor.fetchall()
+
+        for row in contact_owners:
+            owner_id = int(row.get("owner_id"))
+            if owner_id in self.clients:
+                await self.processors.event(
+                    owner_id,
+                    {
+                        "eventType": "presence",
+                        "userId": userId,
+                        "presence": presence_data,
+                        "time": now_ms,
+                    }
+                )
 
     async def _end_session(self, id, ip, port):
         """Завершение сессии"""
@@ -332,6 +384,20 @@ class OnemeWS:
         for i, client in enumerate(clients):
             if (client.get("ip"), client.get("port")) == (ip, port):
                 clients.pop(i)
+
+        if not clients:
+            now = int(time.time())
+            user["status"] = 0
+            user["last_seen"] = now
+
+            async with self.db_pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        "UPDATE users SET lastseen = %s WHERE id = %s",
+                        (str(now), id)
+                    )
+
+            await self._broadcast_presence(id, False)
 
     async def start(self):
         """Функция для запуска WebSocket сервера"""

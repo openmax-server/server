@@ -141,3 +141,12 @@ class ChatSubscribePayloadModel(pydantic.BaseModel):
 class ContactListPayloadModel(pydantic.BaseModel):
     status: str
     count: int = None
+
+class ContactPresencePayloadModel(pydantic.BaseModel):
+    contactIds: list
+
+class ContactUpdatePayloadModel(pydantic.BaseModel):
+    action: str
+    contactId: int
+    firstName: str
+    lastName: str = None

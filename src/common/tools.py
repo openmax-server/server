@@ -332,7 +332,7 @@ class Tools:
         async with db_pool.acquire() as db_connection:
             async with db_connection.cursor() as cursor:
                 await cursor.execute(
-                    "SELECT * FROM `contacts` WHERE owner_id = %s",
+                    "SELECT * FROM `contacts` WHERE owner_id = %s AND is_blocked = FALSE",
                     (owner_id,),
                 )
                 rows = await cursor.fetchall()
@@ -501,3 +501,48 @@ class Tools:
             )
 
         return updated_config
+
+    async def collect_presence(self, contact_ids, clients, db_pool):
+        """Собирает статусы пользователей"""
+        now = int(time.time())
+        presence = {}
+
+        # Список тех, кого нужно поискать в базе данных
+        db_lookup_ids = []
+
+        # Проходимся по всем айдишникам,
+        # которые передал нам клиент
+        for contact_id in contact_ids:
+            contact_id = int(contact_id)
+
+            client = clients.get(contact_id)
+
+            # Если пользователь онлайн
+            if client and client.get("status") == 2:
+                presence[str(contact_id)] = {"seen": now, "status": 2}
+            # Если пользователь подключен, 
+            # но не взаимодействует с клиентом
+            elif client and client.get("last_seen"):
+                presence[str(contact_id)] = {"seen": client.get("last_seen")}
+            # А если никакое условие не подошло, то добавляем его в лист,
+            # а позже посмотрим в базе данных
+            else:
+                db_lookup_ids.append(contact_id)
+
+        # Проходимся по листу и добавляем недостающих,
+        # если такие существуют конечно
+        async with db_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                for contact_id in db_lookup_ids:
+                    await cursor.execute(
+                        "SELECT lastseen FROM users WHERE id = %s",
+                        (contact_id,)
+                    )
+
+                    row = await cursor.fetchone()
+                    
+                    if row:
+                        lastseen = row.get("lastseen")
+                        presence[int(contact_id)] = {"seen": int(lastseen)}
+
+        return presence
