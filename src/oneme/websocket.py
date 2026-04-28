@@ -88,7 +88,7 @@ class OnemeWS:
                             )
                         else:
                             await self.processors.auth(
-                                payload, seq, websocket, deviceType, deviceName, appVersion
+                                payload, seq, websocket, deviceType, deviceName, appVersion, address[0]
                             )
                     case self.opcodes.AUTH_CONFIRM:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
@@ -100,7 +100,7 @@ class OnemeWS:
                             )
                         elif payload and payload.get("tokenType") == "REGISTER":
                             await self.processors.auth_confirm(
-                                payload, seq, websocket, deviceType, deviceName, appVersion
+                                payload, seq, websocket, deviceType, deviceName, appVersion, address[0]
                             )
                         else:
                             self.logger.warning(

@@ -158,7 +158,7 @@ class AuthProcessors(BaseProcessor):
 
         await self._send(writer, packet)
 
-    async def auth_confirm(self, payload, seq, writer, deviceType, deviceName):
+    async def auth_confirm(self, payload, seq, writer, deviceType, deviceName, ip):
         """Обработчик финальной аутентификации"""
         # Валидируем данные пакета
         try:
@@ -212,8 +212,16 @@ class AuthProcessors(BaseProcessor):
                 # Создаем сессию
                 await cursor.execute(
                     "INSERT INTO tokens (phone, token_hash, device_type, device_name, location, time) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (stored_token.get("phone"), hashed_login, deviceType, deviceName,
-                     "Epstein Island", int(time.time()))
+                    (
+                        stored_token.get("phone"), 
+                        hashed_login, 
+                        deviceType, 
+                        deviceName,
+                        self.tools.get_geo(
+                            ip=ip, db_path=self.config.geo_db_path
+                        ), 
+                        int(time.time() * 1000)
+                    )
                 )
 
         # Аватарка с биографией

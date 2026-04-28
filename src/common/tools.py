@@ -1,5 +1,8 @@
 import json
 import time
+import os
+
+import geoip2.database
 
 
 class Tools:
@@ -546,3 +549,15 @@ class Tools:
                         presence[int(contact_id)] = {"seen": int(lastseen)}
 
         return presence
+
+    def get_geo(self, ip, db_path):
+        """
+            Получение страны пользователя по его айпи адресу
+            Используется во время запуска сессии
+        """
+        try:
+            with geoip2.database.Reader(db_path) as reader:
+                response = reader.country(ip)
+                return response.country.name or "Localhost Federation"
+        except Exception: 
+            return "Localhost Federation"

@@ -96,7 +96,7 @@ class TamTamMobile:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
                             await self.processors._send_error(seq, self.opcodes.AUTH_CONFIRM, self.processors.error_types.RATE_LIMITED, writer)
                         else:
-                            await self.processors.auth_confirm(payload, seq, writer, deviceType, deviceName)
+                            await self.processors.auth_confirm(payload, seq, writer, deviceType, deviceName, address[0])
                     case self.opcodes.LOGIN:
                         if not self.auth_rate_limiter.is_allowed(address[0]):
                             await self.processors._send_error(seq, self.opcodes.LOGIN, self.processors.error_types.RATE_LIMITED, writer)

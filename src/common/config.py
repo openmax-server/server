@@ -54,3 +54,6 @@ class ServerConfig:
 
     ### Firebase
     firebase_credentials_path = os.getenv("firebase_credentials_path", "")
+
+    ### Путь к гео бд
+    geo_db_path = os.getenv("geo_db_path", "")

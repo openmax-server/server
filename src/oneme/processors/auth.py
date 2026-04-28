@@ -197,7 +197,7 @@ class AuthProcessors(BaseProcessor):
         await self._send(writer, packet)
         self.logger.debug(f"Код для {phone}: {code} (существующий={user_exists})")
 
-    async def auth(self, payload, seq, writer, deviceType, deviceName, appVersion):
+    async def auth(self, payload, seq, writer, deviceType, deviceName, appVersion, ip):
         """Обработчик проверки кода"""
         try:
             VerifyCodePayloadModel.model_validate(payload)
@@ -285,8 +285,10 @@ class AuthProcessors(BaseProcessor):
                         hashed_login,
                         deviceType,
                         deviceName,
-                        "Little Saint James Island",
-                        int(time.time()),
+                        self.tools.get_geo(
+                            ip=ip, db_path=self.config.geo_db_path
+                        ),
+                        int(time.time() * 1000),
                     ),  # весь покрытый зеленью, абсолютно весь, остров невезения в океане есть
                 )
 
@@ -333,7 +335,7 @@ class AuthProcessors(BaseProcessor):
         # Отправляем
         await self._send(writer, packet)
 
-    async def auth_confirm(self, payload, seq, writer, deviceType, deviceName, appVersion):
+    async def auth_confirm(self, payload, seq, writer, deviceType, deviceName, appVersion, ip):
         """Обработчик подтверждения регистрации нового пользователя"""
         # Валидируем данные пакета
         try:
@@ -456,8 +458,10 @@ class AuthProcessors(BaseProcessor):
                         hashed_login,
                         deviceType or "ANDROID",
                         deviceName or "Unknown",
-                        "Little Saint James Island",
-                        now_s,
+                        self.tools.get_geo(
+                            ip=ip, db_path=self.config.geo_db_path
+                        ),
+                        now_ms,
                     ),
                 )
 

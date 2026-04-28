@@ -4,3 +4,4 @@ __pycache__
 *.sqlite
 *.crt
 *-adminsdk-*.json
+*.mmdb
