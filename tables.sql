@@ -59,3 +59,5 @@ CREATE TABLE `messages` (
     `elements` JSON NOT NULL,
     `type` VARCHAR(16) NOT NULL
 );
+
+CREATE INDEX idx_messages_sender_chat ON messages(sender, chat_id);
