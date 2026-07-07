@@ -43,5 +43,18 @@ class ServerConfig:
 
     ### Telegram bot
     telegram_bot_token = os.getenv("telegram_bot_token") or "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    telegram_bot_enabled = bool(os.getenv("telegram_bot_enabled")) or True
+    telegram_bot_enabled = bool(int(os.getenv("telegram_bot_enabled", 0)))
     telegram_whitelist_ids = [x.strip() for x in os.getenv("telegram_whitelist_ids", "").split(",") if x.strip()]
+    telegram_whitelist_enabled = bool(int(os.getenv("telegram_whitelist_enabled", 0)))
+
+    ### origins
+    origins = [x.strip() for x in os.getenv("origins", "").split(",") if x.strip()] if os.getenv("origins") else None
+
+    ### sms шлюз
+    sms_gateway_url = os.getenv("sms_gateway_url", "")
+
+    ### Firebase
+    firebase_credentials_path = os.getenv("firebase_credentials_path", "")
+
+    ### Путь к гео бд
+    geo_db_path = os.getenv("geo_db_path", "")

@@ -1,10 +1,12 @@
-import time, logging
+import logging
+import time
 
 
 class RateLimiter:
     """
     ip rate limiter using sliding window algorithm
     """
+
     def __init__(self, max_attempts=5, window_seconds=60):
         self.max_attempts = max_attempts
         self.window_seconds = window_seconds
@@ -21,7 +23,9 @@ class RateLimiter:
         self.attempts[ip] = [t for t in self.attempts[ip] if t > cutoff]
 
         if len(self.attempts[ip]) >= self.max_attempts:
-            self.logger.warning(f"request limit exceeded for {ip}: {len(self.attempts[ip])}/{self.max_attempts}")
+            self.logger.warning(
+                f"request limit exceeded for {ip}: {len(self.attempts[ip])}/{self.max_attempts}"
+            )
             return False
 
         self.attempts[ip].append(now)

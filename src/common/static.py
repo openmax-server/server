@@ -13,6 +13,9 @@ class Static:
         CHAT_NOT_FOUND = "chat_not_found"
         CHAT_NOT_ACCESS = "chat_not_access"
         RATE_LIMITED = "rate_limited"
+        CONTACT_NOT_FOUND = "contact_not_found"
+        CONTACT_ALREADY_ADDED = "contact_already_added"
+        CONTACT_BLOCKED = "contact_blocked"
 
     class ChatTypes:
         DIALOG = "DIALOG"
@@ -80,7 +83,25 @@ class Static:
             "error": "error.rate_limited",
             "message": "Too many attempts. Please try again later",
             "title": "Слишком много попыток"
-        }
+        },
+        "contact_not_found": {
+            "localizedMessage": "Контакт не найден",
+            "error": "contact.not.found",
+            "message": "Contact not found",
+            "title": "Контакт не найден"
+        },
+        "contact_already_added": {
+            "localizedMessage": "Контакт уже добавлен",
+            "error": "contact.already.added",
+            "message": "Contact already added",
+            "title": "Контакт уже добавлен"
+        },
+        "contact_blocked": {
+            "localizedMessage": "Вы не можете написать этому пользователю",
+            "error": "contact.blocked",
+            "message": "Contact is blocked",
+            "title": "Вы не можете написать этому пользователю"
+        },
     }
 
     ### Сообщения бота
@@ -116,35 +137,85 @@ class Static:
 
     ### Причины для жалоб
     COMPLAIN_REASONS = [
-        "Порнография или эротика",
-        "Экстремизм или терроризм",
-        "Фейк",
-        "Мошенничество",
-        "Нарушение авторского права",
-        "Шокирующий контент",
-        "Персональные данные",
-        "Незаконная услуга",
-        "Это законно, но надо удалить"
+        {"typeId": 5, "reasons": [
+            {"reasonTitle": "Мошенничество", "reasonId": 8},
+            {"reasonTitle": "Спам", "reasonId": 9},
+            {"reasonTitle": "Порнографический контент", "reasonId": 23},
+            {"reasonTitle": "Насилие", "reasonId": 18},
+            {"reasonTitle": "Оскорбления", "reasonId": 11},
+            {"reasonTitle": "Экстремизм", "reasonId": 20},
+            {"reasonTitle": "Запрещенные товары", "reasonId": 21},
+            {"reasonTitle": "Мне не нравится", "reasonId": 22},
+            {"reasonTitle": "Другое", "reasonId": 7},
+        ]},
+        {"typeId": 4, "reasons": [
+            {"reasonTitle": "Мошенничество", "reasonId": 8},
+            {"reasonTitle": "Спам", "reasonId": 9},
+            {"reasonTitle": "Порнографический контент", "reasonId": 23},
+            {"reasonTitle": "Насилие", "reasonId": 18},
+            {"reasonTitle": "Оскорбления", "reasonId": 11},
+            {"reasonTitle": "Экстремизм", "reasonId": 20},
+            {"reasonTitle": "Запрещенные товары", "reasonId": 21},
+            {"reasonTitle": "Другое", "reasonId": 7},
+        ]},
+        {"typeId": 3, "reasons": [
+            {"reasonTitle": "Мошенничество", "reasonId": 8},
+            {"reasonTitle": "Спам", "reasonId": 9},
+            {"reasonTitle": "Порнографический контент", "reasonId": 23},
+            {"reasonTitle": "Насилие", "reasonId": 18},
+            {"reasonTitle": "Оскорбления", "reasonId": 11},
+            {"reasonTitle": "Экстремизм", "reasonId": 20},
+            {"reasonTitle": "Запрещенные товары", "reasonId": 21},
+            {"reasonTitle": "Другое", "reasonId": 7},
+        ]},
+        {"typeId": 7, "reasons": [
+            {"reasonTitle": "Мошенничество", "reasonId": 8},
+            {"reasonTitle": "Спам", "reasonId": 9},
+            {"reasonTitle": "Порнографический контент", "reasonId": 23},
+            {"reasonTitle": "Насилие", "reasonId": 18},
+            {"reasonTitle": "Оскорбления", "reasonId": 11},
+            {"reasonTitle": "Экстремизм", "reasonId": 20},
+            {"reasonTitle": "Запрещенные товары", "reasonId": 21},
+            {"reasonTitle": "Другое", "reasonId": 7},
+        ]},
+        {"typeId": 8, "reasons": [
+            {"reasonTitle": "Спам", "reasonId": 9},
+            {"reasonTitle": "Шантаж", "reasonId": 10},
+            {"reasonTitle": "Оскорбления", "reasonId": 11},
+            {"reasonTitle": "Другое", "reasonId": 7},
+        ]},
+        {"typeId": 2, "reasons": [
+            {"reasonTitle": "Мошенничество", "reasonId": 8},
+            {"reasonTitle": "Спам", "reasonId": 9},
+            {"reasonTitle": "Порнографический контент", "reasonId": 23},
+            {"reasonTitle": "Насилие", "reasonId": 18},
+            {"reasonTitle": "Оскорбления", "reasonId": 11},
+            {"reasonTitle": "Экстремизм", "reasonId": 20},
+            {"reasonTitle": "Запрещенные товары", "reasonId": 21},
+            {"reasonTitle": "Мне не нравится", "reasonId": 22},
+            {"reasonTitle": "Другое", "reasonId": 7},
+        ]},
+        {"typeId": 6, "reasons": [
+            {"reasonTitle": "Мошенничество", "reasonId": 8},
+            {"reasonTitle": "Спам", "reasonId": 9},
+            {"reasonTitle": "Порнографический контент", "reasonId": 23},
+            {"reasonTitle": "Насилие", "reasonId": 18},
+            {"reasonTitle": "Оскорбления", "reasonId": 11},
+            {"reasonTitle": "Экстремизм", "reasonId": 20},
+            {"reasonTitle": "Запрещенные товары", "reasonId": 21},
+            {"reasonTitle": "Другое", "reasonId": 7},
+        ]},
+        {"typeId": 1, "reasons": [
+            {"reasonTitle": "Мошенничество", "reasonId": 8},
+            {"reasonTitle": "Спам", "reasonId": 9},
+            {"reasonTitle": "Порнографический контент", "reasonId": 23},
+            {"reasonTitle": "Насилие", "reasonId": 18},
+            {"reasonTitle": "Оскорбления", "reasonId": 11},
+            {"reasonTitle": "Экстремизм", "reasonId": 20},
+            {"reasonTitle": "Запрещенные товары", "reasonId": 21},
+            {"reasonTitle": "Другое", "reasonId": 7},
+        ]},
     ]
-
-    ### Заглушка для папок
-    ALL_CHAT_FOLDER = [{
-        "id": "all.chat.folder",
-        "title": "Все",
-        "filters": [],
-        "updateTime": 0,
-        "options": [],
-        "sourceId": 1
-    }]
-
-    ALL_CHAT_FOLDER_ORDER = ["all.chat.folder"]
-
-    ### Стандартные папки с настройками пользователя
-    USER_FOLDERS = {
-        "folders": [], 
-        "foldersOrder": [], 
-        "allFilterExcludeFolders": []
-    }
 
     USER_SETTINGS = {
         "CHATS_PUSH_NOTIFICATION": "ON",
@@ -176,3 +247,23 @@ class Static:
         "M_CALL_PUSH_NOTIFICATION": "ON",
         "QUICK_REPLY": False
     }
+
+    ### Коды стран, которым разрешён вход
+    REG_COUNTRY_CODES = ['AD', 'AE', 'AF', 'AG', 'AI', 'AL', 'AM', 'AO', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AW', 
+                         'AX', 'AZ', 'BA', 'BB', 'BD', 'BE', 'BF', 'BG', 'BH', 'BI', 'BJ', 'BL', 'BM', 'BN', 
+                         'BO', 'BR', 'BS', 'BT', 'BW', 'BY', 'BZ', 'CA', 'CC', 'CD', 'CF', 'CG', 'CH', 'CI', 
+                         'CK', 'CL', 'CM', 'CN', 'CO', 'CR', 'CU', 'CV', 'CW', 'CX', 'CY', 'CZ', 'DE', 'DJ', 
+                         'DK', 'DM', 'DO', 'DZ', 'EC', 'EE', 'EG', 'ER', 'ES', 'ET', 'FI', 'FJ', 'FK', 'FM', 
+                         'FO', 'FR', 'GA', 'GB', 'GD', 'GE', 'GF', 'GG', 'GH', 'GI', 'GL', 'GM', 'GN', 'GP', 
+                         'GQ', 'GR', 'GT', 'GU', 'GW', 'GY', 'HK', 'HN', 'HR', 'HT', 'HU', 'ID', 'IE', 'IL', 
+                         'IM', 'IS', 'IN', 'IO', 'IQ', 'IR', 'IT', 'JE', 'JM', 'JO', 'JP', 'KE', 'KG', 'KH', 
+                         'KI', 'KM', 'KN', 'KP', 'KR', 'KW', 'KY', 'KZ', 'LA', 'LB', 'LC', 'LI', 'LK', 'LR', 
+                         'LS', 'LT', 'LU', 'LV', 'LY', 'MA', 'MC', 'MD', 'ME', 'MF', 'MG', 'MH', 'MK', 'ML', 
+                         'MM', 'MN', 'MO', 'MP', 'MQ', 'MR', 'MS', 'MT', 'MU', 'MV', 'MW', 'MX', 'MY', 'MZ', 
+                         'NA', 'NC', 'NE', 'NF', 'NG', 'NI', 'NL', 'NO', 'NP', 'NR', 'NU', 'NZ', 'OM', 'PA', 
+                         'PE', 'PF', 'PG', 'PH', 'PK', 'PL', 'PM', 'PN', 'PR', 'PS', 'PT', 'PW', 'PY', 'QA', 
+                         'RE', 'RO', 'RS', 'RU', 'RW', 'SA', 'SB', 'SC', 'SD', 'SE', 'SG', 'SH', 'SI', 'SK', 
+                         'SL', 'SM', 'SN', 'SO', 'SR', 'SS', 'ST', 'SV', 'SX', 'SY', 'SZ', 'TC', 'TD', 'TG', 
+                         'TH', 'TJ', 'TK', 'TL', 'TM', 'TN', 'TO', 'TR', 'TT', 'TV', 'TW', 'TZ', 'UA', 'UG', 
+                         'US', 'UY', 'UZ', 'VA', 'VC', 'VE', 'VG', 'VI', 'VN', 'VU', 'WF', 'WS', 'XK', 'YE', 
+                         'YT', 'ZA', 'ZM', 'ZW']

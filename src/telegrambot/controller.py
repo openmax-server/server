@@ -19,7 +19,8 @@ class TelegramBotController(ControllerBase):
             token=self.config.telegram_bot_token,
             enabled=self.config.telegram_bot_enabled,
             db_pool=api['db'],
-            whitelist_ids=self.config.telegram_whitelist_ids
+            whitelist_ids=self.config.telegram_whitelist_ids,
+            whitelist_enabled=self.config.telegram_whitelist_enabled,
         )
 
         return _start_all()
